@@ -1,6 +1,6 @@
-# [V1 - POO] La classe Produit est le cœur du logiciel.
-# Elle regroupe toutes les informations d'un produit en un seul objet.
-# Un "objet" = données (attributs) + comportements (méthodes).
+# [V2 - Méthodes Magiques] La classe Produit enrichie avec des comportements natifs Python.
+# Les méthodes magiques (__eq__, __lt__, __hash__...) permettent de comparer,
+# trier et utiliser les objets Produit comme des types Python natifs.
 
 class Produit:
     """
@@ -76,9 +76,38 @@ class Produit:
         return cls(**data)
 
     def __str__(self) -> str:
-        """Représentation lisible — appelée par print(produit)."""
-        return f"[{self.ref}] {self.nom} | Qté: {self.qte} | {self.statut_label()}"
+        """Appelé par print(produit) — version lisible pour l'utilisateur."""
+        statut = "⚠️ ALERTE" if self.est_en_alerte() else "✅ OK"
+        return f"[{self.ref}] {self.nom} | Qté: {self.qte} | {statut}"
 
     def __repr__(self) -> str:
-        """Représentation technique — utile dans le débogueur."""
+        """Appelé dans le débogueur — version technique pour le développeur."""
         return f"Produit(ref={self.ref!r}, nom={self.nom!r}, qte={self.qte})"
+
+    # ── Méthodes Magiques V2 ──────────────────────────────────────────────
+    # Ces méthodes donnent à Produit des comportements "naturels" en Python.
+
+    def __eq__(self, other) -> bool:
+        """
+        Deux produits sont égaux s'ils ont la même référence.
+        Permet : produit1 == produit2
+        """
+        if not isinstance(other, Produit):
+            return NotImplemented
+        return self.ref == other.ref
+
+    def __lt__(self, other) -> bool:
+        """
+        Comparaison pour le tri : sorted(produits) trie par nom alphabétique.
+        Permet : produit1 < produit2  →  utilisé par sorted() et min/max
+        """
+        if not isinstance(other, Produit):
+            return NotImplemented
+        return self.nom.lower() < other.nom.lower()
+
+    def __hash__(self) -> int:
+        """
+        Permet d'utiliser un Produit comme clé de dict ou dans un set.
+        Obligatoire quand on définit __eq__ (Python désactive __hash__ sinon).
+        """
+        return hash(self.ref)

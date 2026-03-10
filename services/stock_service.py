@@ -1,10 +1,6 @@
-# [V1 - POO] Le service est le "chef d'orchestre" : il coordonne
-# les objets Produit et gère la persistance dans le fichier JSON.
-#
-# Pourquoi un service séparé ?
-# - Les classes Produit/Mouvement ne savent pas qu'un fichier JSON existe
-# - Si on passe à une base de données (V10), seul ce fichier change
-# - Séparation des responsabilités : modèle ≠ persistance
+# [V2 - Méthodes Magiques] Le service enrichi avec des comportements natifs Python.
+# __len__, __contains__, __iter__ permettent d'utiliser StockService comme
+# un conteneur Python standard : len(stock), "ref" in stock, for p in stock.
 
 import json
 from pathlib import Path
@@ -12,6 +8,29 @@ from pathlib import Path
 from models.produit   import Produit
 from models.mouvement import Mouvement
 from config           import DATA_DIR
+
+
+# ── Context Manager pour la sauvegarde sécurisée ─────────────────────────────
+# [V2 - Context Manager] __enter__ et __exit__ garantissent que le fichier
+# est toujours fermé proprement, même en cas d'erreur lors de l'écriture.
+
+class FichierStock:
+    """Gestionnaire de contexte pour la sauvegarde sécurisée du stock JSON."""
+
+    def __init__(self, chemin: Path):
+        self.chemin   = chemin
+        self._fichier = None
+
+    def __enter__(self):
+        """Ouvre le fichier en écriture et le retourne."""
+        self._fichier = open(self.chemin, "w", encoding="utf-8")
+        return self._fichier
+
+    def __exit__(self, type_erreur, valeur, traceback):
+        """Ferme toujours le fichier, même si une exception s'est produite."""
+        if self._fichier:
+            self._fichier.close()
+        return False   # False = ne pas étouffer l'exception si elle existe
 
 
 class StockService:
@@ -136,20 +155,37 @@ class StockService:
         """Nombre total de références en stock."""
         return len(self._produits)
 
+    # ── Méthodes Magiques V2 ──────────────────────────────────────────────
+    # Ces méthodes font de StockService un conteneur Python natif.
+
+    def __len__(self) -> int:
+        """len(stock) retourne le nombre de produits."""
+        return len(self._produits)
+
+    def __contains__(self, ref: str) -> bool:
+        """'CRAY-001' in stock  → True/False directement."""
+        return ref in self._produits
+
+    def __iter__(self):
+        """for produit in stock: ...  → itère sur tous les produits."""
+        return iter(self._produits.values())
+
+    def __str__(self) -> str:
+        """print(stock) affiche un résumé propre."""
+        alertes = len(self.produits_en_alerte())
+        return f"Al Qalam Stock · {len(self)} produits · {alertes} alerte(s)"
+
     # ── Persistance ───────────────────────────────────────────────────────
 
     def sauvegarder(self) -> None:
         """
-        Sauvegarde le stock dans data/stock.json.
-        Crée le répertoire data/ si nécessaire.
+        Sauvegarde le stock dans data/stock.json via le context manager FichierStock.
+        [V2] Utilise 'with FichierStock(...)' au lieu de write_text direct.
         """
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         data = [p.to_dict() for p in self._produits.values()]
-        # ensure_ascii=False → les accents sont lisibles dans le fichier
-        self._chemin.write_text(
-            json.dumps(data, indent=2, ensure_ascii=False),
-            encoding="utf-8"
-        )
+        with FichierStock(self._chemin) as f:
+            f.write(json.dumps(data, indent=2, ensure_ascii=False))
 
     def charger(self) -> None:
         """
