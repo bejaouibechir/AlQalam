@@ -1,12 +1,13 @@
-# [V9 - Excel] Point d'entrée de l'application Al Qalam Stock Manager.
+# [V10 - SQLite] Point d'entrée de l'application Al Qalam Stock Manager.
 #
-# Nouveautés V9 :
-#   - services/excel_service.py : openpyxl — export rapport multi-feuilles + import bon de commande
-#   - ExcelService.exporter_rapport_stock() : classeur 3 feuilles colorisé (Catalogue, Ruptures, Stats)
-#   - ExcelService.importer_bon_commande()  : lit un .xlsx fournisseur et approvisionne le stock
-#   - Nouvel onglet "📊 Excel" : interface export/import avec prévisualisation Treeview
+# Nouveautés V10 :
+#   - services/database_service.py : sqlite3 stdlib — schéma 2 tables (produits + mouvements)
+#   - StockService : persistance SQLite au lieu de JSON, mouvements historisés en base
+#   - Migration automatique : stock.json → alqalam.db au 1er lancement
+#   - Nouvel onglet "🗄️ Historique" : requêtes filtrées, stats, export CSV
 #
 # Prérequis : py -3 -m pip install openpyxl customtkinter
+# (sqlite3 est dans la bibliothèque standard Python — aucun pip requis)
 #
 # Lancement :
 #   py -3 main.py
@@ -20,7 +21,7 @@ from ui.app import AlQalamApp
 
 
 def main():
-    """Lance l'application Al Qalam Stock Manager V9."""
+    """Lance l'application Al Qalam Stock Manager V10."""
     app = AlQalamApp()
     app.mainloop()
 

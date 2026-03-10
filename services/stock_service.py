@@ -1,115 +1,97 @@
-# [V6 - Métaclasses] StockService utilise SingletonMeta pour garantir une
-# instance unique, et Mouvement.fabriquer() pour créer le bon type via le registre.
+# [V10 - SQLite] StockService utilise DatabaseService pour la persistance.
 #
-# CHANGEMENTS V6 :
-#   1. class StockService(metaclass=SingletonMeta)
-#      → StockService() retourne TOUJOURS la même instance
-#      → id(StockService()) == id(StockService())  →  True
+# CHANGEMENTS V10 :
+#   - Remplacement de la persistance JSON par SQLite (module sqlite3 stdlib)
+#   - DatabaseService gère toutes les opérations CRUD sur la DB
+#   - Mouvements persistés en base (historique complet, filtrable)
+#   - Migration automatique depuis stock.json au 1er lancement
+#   - Suppression de FichierStock (context manager JSON, plus nécessaire)
+#   - charger() lit depuis SQLite au lieu du JSON
+#   - sauvegarder() → sauvegarder_produit(ref) : mise à jour ciblée (plus efficace)
 #
-#   2. import models.types_mouvement  (force l'enregistrement des 4 sous-classes)
-#      → après cet import, RegistreMouvementMeta._registre contient :
-#        {"entree": EntreeMouvement, "sortie": SortieMouvement,
-#         "ajustement": AjustementMouvement, "retour": RetourMouvement}
-#
-#   3. entree_stock / sortie_stock utilisent Mouvement.fabriquer(type, ...)
-#      → au lieu de Mouvement(ref, type, qte, note) directement
-#
-#   4. Nouvelle méthode : ajustement_stock(ref, qte_cible, note)
-#      → inventaire physique : règle la quantité à une valeur absolue cible
+# API PUBLIQUE INCHANGÉE (compatibilité UI) :
+#   ajouter_produit, mettre_a_jour_produit, supprimer_produit,
+#   entree_stock, sortie_stock, ajustement_stock, retour_stock,
+#   get_produit, lister_tous, nb_produits, nb_alertes, ...
 
-import json
 import threading
 from pathlib import Path
 
 from models.produit    import Produit
 from models.mouvement  import Mouvement
 import models.types_mouvement          # [V6] force l'enregistrement des 4 types
-from config            import DATA_DIR
+from config            import DATA_DIR, DB_PATH
 from metaclasses.singleton             import SingletonMeta
 from decorateurs.journalisation        import journaliser
 from decorateurs.validation            import valider_qte
 from services.journal_service          import JournalService
+from services.database_service         import DatabaseService   # [V10]
 
-
-# ── Context Manager (V2) ───────────────────────────────────────────────────────
-
-class FichierStock:
-    """Gestionnaire de contexte pour la sauvegarde sécurisée du stock JSON."""
-
-    def __init__(self, chemin: Path):
-        self.chemin   = chemin
-        self._fichier = None
-
-    def __enter__(self):
-        self._fichier = open(self.chemin, "w", encoding="utf-8")
-        return self._fichier
-
-    def __exit__(self, type_erreur, valeur, traceback):
-        if self._fichier:
-            self._fichier.close()
-        return False
-
-
-# ── StockService ──────────────────────────────────────────────────────────────
 
 class StockService(metaclass=SingletonMeta):
     """
     Gère l'ensemble du stock : ajout, entrée, sortie, ajustement, persistance.
 
-    [V6] Singleton garanti par SingletonMeta :
-      - Premier appel  : StockService() → crée l'instance, charge le stock
-      - Appels suivants: StockService() → retourne la même instance (sans __init__)
-      - Preuve : assert StockService() is StockService()  →  True
+    [V10] Persistance SQLite via DatabaseService :
+      - Deux tables : produits + mouvements (historique complet)
+      - Chargement initial depuis la base au démarrage
+      - Chaque modification met à jour la base immédiatement
+      - Migration automatique depuis stock.json si présent
 
-    [V6] Types de mouvements étendus via le registre RegistreMouvementMeta :
-      - entree     → EntreeMouvement
-      - sortie     → SortieMouvement
-      - ajustement → AjustementMouvement  (nouveau V6)
-      - retour     → RetourMouvement      (nouveau V6)
+    [V6] Singleton garanti par SingletonMeta.
+    [V6] Types de mouvements via registre RegistreMouvementMeta.
     """
 
     def __init__(self):
-        self._produits   = {}   # dict { ref: Produit }
-        self._mouvements = []   # liste chronologique de Mouvement (sous-classes)
-        self._chemin     = DATA_DIR / "stock.json"
+        self._produits   = {}   # cache en mémoire { ref: Produit }
+        self._mouvements = []   # cache en mémoire (pour compatibilité UI)
         self._lock       = threading.Lock()
         self._journal    = JournalService()
+        self._db         = DatabaseService(DB_PATH)   # [V10]
         self.charger()
 
-    # ── Propriété publique vers le journal (pour l'UI) ────────────────────
+    # ── Propriété publique vers le journal ────────────────────────────────
 
     @property
     def journal(self) -> JournalService:
         return self._journal
 
+    # ── Propriété publique vers la base (pour l'onglet Historique) ────────
+
+    @property
+    def db(self) -> DatabaseService:
+        """Expose la DatabaseService pour les requêtes de l'onglet Historique."""
+        return self._db
+
     # ── Gestion des produits ──────────────────────────────────────────────
 
     @journaliser("ajout")
     def ajouter_produit(self, produit: Produit) -> None:
-        """Ajoute un nouveau produit au catalogue."""
+        """Ajoute un nouveau produit au catalogue et en base."""
         with self._lock:
             if produit.ref in self._produits:
                 raise ValueError(f"La référence '{produit.ref}' existe déjà dans le stock.")
             self._produits[produit.ref] = produit
-        self.sauvegarder()
+        # [V10] Persistance SQLite au lieu de JSON
+        self._db.inserer_produit(produit.to_dict())
 
     @journaliser("modification")
     def mettre_a_jour_produit(self, produit: Produit) -> None:
-        """Met à jour un produit existant."""
+        """Met à jour un produit existant en mémoire et en base."""
         with self._lock:
             if produit.ref not in self._produits:
                 raise KeyError(f"Produit '{produit.ref}' introuvable.")
             self._produits[produit.ref] = produit
-        self.sauvegarder()
+        self._db.mettre_a_jour_produit(produit.to_dict())
 
     @journaliser("suppression")
     def supprimer_produit(self, ref: str) -> None:
-        """Supprime un produit du catalogue."""
+        """Supprime un produit du catalogue et de la base."""
         with self._lock:
             if ref not in self._produits:
                 raise KeyError(f"Produit '{ref}' introuvable.")
             del self._produits[ref]
-        self.sauvegarder()
+        self._db.supprimer_produit(ref)
 
     def get_produit(self, ref: str) -> Produit:
         with self._lock:
@@ -134,28 +116,25 @@ class StockService(metaclass=SingletonMeta):
     @valider_qte(min_val=1, max_val=100_000)
     def entree_stock(self, ref: str, qte: int, note: str = "") -> None:
         """
-        Enregistre une entrée de stock (réception marchandise).
+        Enregistre une entrée de stock.
 
-        [V6] Utilise Mouvement.fabriquer("entree", ...) qui retourne
-             une instance de EntreeMouvement (pas de Mouvement de base).
+        [V10] Le mouvement est persisté en SQLite (table mouvements).
         """
         with self._lock:
             if ref not in self._produits:
                 raise KeyError(f"Produit '{ref}' introuvable.")
             produit = self._produits[ref]
             produit.qte += qte
-            # [V6] fabriquer() consulte le registre → crée EntreeMouvement
-            self._mouvements.append(Mouvement.fabriquer("entree", ref, qte, note))
-        self.sauvegarder()
+            mvt = Mouvement.fabriquer("entree", ref, qte, note)
+            self._mouvements.append(mvt)
+        # [V10] Double persistance : qte dans produits, mouvement dans mouvements
+        self._db.mettre_a_jour_qte(ref, produit.qte)
+        self._db.inserer_mouvement(self._mouvement_to_db(mvt, produit.nom))
 
     @journaliser("sortie")
     @valider_qte(min_val=1, max_val=100_000)
     def sortie_stock(self, ref: str, qte: int, note: str = "") -> None:
-        """
-        Enregistre une sortie de stock (vente ou consommation).
-
-        [V6] Crée SortieMouvement via le registre.
-        """
+        """Enregistre une sortie de stock."""
         with self._lock:
             if ref not in self._produits:
                 raise KeyError(f"Produit '{ref}' introuvable.")
@@ -166,50 +145,33 @@ class StockService(metaclass=SingletonMeta):
                     f"{produit.qte} disponible, {qte} demandé."
                 )
             produit.qte -= qte
-            self._mouvements.append(Mouvement.fabriquer("sortie", ref, qte, note))
-        self.sauvegarder()
+            mvt = Mouvement.fabriquer("sortie", ref, qte, note)
+            self._mouvements.append(mvt)
+        self._db.mettre_a_jour_qte(ref, produit.qte)
+        self._db.inserer_mouvement(self._mouvement_to_db(mvt, produit.nom))
 
     @journaliser("ajustement")
     def ajustement_stock(self, ref: str, qte_cible: int, note: str = "") -> None:
-        """
-        [V6] Ajuste le stock à une quantité cible (inventaire physique).
-
-        Cas d'usage : comptage physique révèle que le stock réel diffère
-        du stock théorique. L'ajustement corrige l'écart.
-
-        Args:
-            ref       : référence du produit
-            qte_cible : nouvelle quantité absolue (résultat du comptage)
-            note      : raison de l'ajustement (casse, vol, erreur saisie…)
-        """
+        """Ajuste le stock à une quantité cible (inventaire physique)."""
         with self._lock:
             if ref not in self._produits:
                 raise KeyError(f"Produit '{ref}' introuvable.")
-            produit  = self._produits[ref]
+            produit   = self._produits[ref]
             qte_avant = produit.qte
-            delta    = qte_cible - qte_avant
-
-            # La quantité cible doit être positive ou nulle
+            delta     = qte_cible - qte_avant
             if qte_cible < 0:
                 raise ValueError(f"La quantité cible ne peut pas être négative : {qte_cible}")
-
             produit.qte = qte_cible
-            # AjustementMouvement avec delta (peut être 0 si pas de changement)
             note_auto = note or f"Inventaire : {qte_avant}→{qte_cible} (Δ{delta:+d})"
-            self._mouvements.append(
-                Mouvement.fabriquer("ajustement", ref, abs(delta) or 1, note_auto)
-            )
-        self.sauvegarder()
+            mvt = Mouvement.fabriquer("ajustement", ref, abs(delta) or 1, note_auto)
+            self._mouvements.append(mvt)
+        self._db.mettre_a_jour_qte(ref, produit.qte)
+        self._db.inserer_mouvement(self._mouvement_to_db(mvt, produit.nom))
 
     @journaliser("retour")
     @valider_qte(min_val=1, max_val=100_000)
     def retour_stock(self, ref: str, qte: int, note: str = "") -> None:
-        """
-        [V6] Enregistre un retour fournisseur (marchandise renvoyée).
-
-        Le stock diminue (retour = sortie comptable) mais est catégorisé
-        séparément pour les rapports fournisseurs.
-        """
+        """Enregistre un retour fournisseur."""
         with self._lock:
             if ref not in self._produits:
                 raise KeyError(f"Produit '{ref}' introuvable.")
@@ -220,30 +182,31 @@ class StockService(metaclass=SingletonMeta):
                     f"{produit.qte} disponible, {qte} à retourner."
                 )
             produit.qte -= qte
-            self._mouvements.append(Mouvement.fabriquer("retour", ref, qte, note))
-        self.sauvegarder()
+            mvt = Mouvement.fabriquer("retour", ref, qte, note)
+            self._mouvements.append(mvt)
+        self._db.mettre_a_jour_qte(ref, produit.qte)
+        self._db.inserer_mouvement(self._mouvement_to_db(mvt, produit.nom))
 
     def get_mouvements(self) -> list:
+        """Retourne le cache mémoire des mouvements (session courante)."""
         return list(self._mouvements)
 
     def stats_par_type(self) -> dict:
         """
-        [V6] Statistiques des mouvements groupées par type.
+        Statistiques des mouvements groupées par type.
 
-        Retourne :
-            { "entree": {"nb": 5, "qte_totale": 230, "classe": EntreeMouvement},
-              "sortie": {"nb": 3, "qte_totale": 80,  "classe": SortieMouvement},
-              ... }
+        [V10] Délègue la requête d'agrégation à DatabaseService.
         """
         from metaclasses.registre import RegistreMouvementMeta
         registre = RegistreMouvementMeta.get_registre()
+        stats_db = self._db.stats_mouvements()
 
         stats = {}
         for type_mvt, classe in registre.items():
-            mvts = [m for m in self._mouvements if m.type_mvt == type_mvt]
+            s = stats_db.get(type_mvt, {"nb": 0, "qte_totale": 0})
             stats[type_mvt] = {
-                "nb"         : len(mvts),
-                "qte_totale" : sum(m.qte for m in mvts),
+                "nb"         : s["nb"],
+                "qte_totale" : s["qte_totale"],
                 "classe"     : classe,
                 "icone"      : classe.ICONE,
                 "label"      : classe.LABEL,
@@ -309,39 +272,57 @@ class StockService(metaclass=SingletonMeta):
         alertes = len(self.produits_en_alerte())
         return f"Al Qalam Stock · {len(self)} produits · {alertes} alerte(s)"
 
-    # ── Persistance ───────────────────────────────────────────────────────
-
-    def sauvegarder(self) -> None:
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-        data = [p.to_dict() for p in self._produits.values()]
-        with FichierStock(self._chemin) as f:
-            f.write(json.dumps(data, indent=2, ensure_ascii=False))
+    # ── Persistance SQLite [V10] ──────────────────────────────────────────
 
     def charger(self) -> None:
-        if not self._chemin.exists():
+        """
+        [V10] Charge le stock depuis SQLite.
+
+        Séquence au premier lancement :
+          1. Tente la migration depuis stock.json (si présent)
+          2. Si la table est vide après migration → seeder
+          3. Charge tous les produits en mémoire depuis SQLite
+        """
+        # Migration JSON → SQLite (au premier lancement seulement)
+        chemin_json = DATA_DIR / "stock.json"
+        nb_migres   = self._db.migrer_depuis_json(chemin_json)
+        if nb_migres:
+            print(f"[StockService] Migration JSON -> SQLite : {nb_migres} produits importes.")
+
+        # Charger les produits depuis SQLite
+        rows = self._db.charger_produits()
+
+        if not rows:
             self._seeder()
             return
-        try:
-            texte = self._chemin.read_text(encoding="utf-8")
-            data  = json.loads(texte)
-            self._produits = {d["ref"]: Produit.from_dict(d) for d in data}
-        except (json.JSONDecodeError, KeyError) as e:
-            print(f"[StockService] Fichier corrompu ({e}), réinitialisation.")
-            self._seeder()
+
+        self._produits = {r["ref"]: Produit.from_dict(r) for r in rows}
+
+    def _mouvement_to_db(self, mvt: Mouvement, nom_produit: str) -> dict:
+        """Convertit un objet Mouvement en dict compatible avec inserer_mouvement()."""
+        return {
+            "date"    : mvt.date,
+            "type_mvt": mvt.type_mvt,
+            "ref"     : mvt.ref_produit,
+            "produit" : nom_produit,
+            "qte"     : mvt.qte,
+            "note"    : mvt.note,
+        }
 
     def _seeder(self) -> None:
+        """Initialise la base avec les 10 produits de démo."""
         demo = [
-            Produit("CRAY-001", "Crayon HB",       "Écriture", 0.15, 0.50, 150, 20),
-            Produit("CRAY-002", "Crayon 2B",        "Écriture", 0.20, 0.60,   8, 20),
-            Produit("STYL-001", "Stylo Bleu",       "Écriture", 0.30, 0.90, 200, 30),
-            Produit("STYL-002", "Stylo Rouge",      "Écriture", 0.30, 0.90,   4, 30),
-            Produit("GOM-001",  "Gomme Blanche",    "Effaçage", 0.20, 0.70,  60, 10),
-            Produit("PAP-A4",   "Rame Papier A4",   "Papier",   2.50, 5.00, 300, 50),
-            Produit("PAP-A3",   "Rame Papier A3",   "Papier",   4.00, 8.00,   6, 10),
-            Produit("CIS-001",  "Ciseaux 17cm",     "Coupe",    1.50, 4.00,  25,  5),
-            Produit("REG-001",  "Règle 30cm",       "Mesure",   0.80, 2.00,  40, 10),
-            Produit("CAR-001",  "Carnet A5",        "Papier",   1.20, 3.50,   3, 10),
+            Produit("CRAY-001", "Crayon HB",     "Écriture", 0.15, 0.50, 150, 20),
+            Produit("CRAY-002", "Crayon 2B",      "Écriture", 0.20, 0.60,   8, 20),
+            Produit("STYL-001", "Stylo Bleu",     "Écriture", 0.30, 0.90, 200, 30),
+            Produit("STYL-002", "Stylo Rouge",    "Écriture", 0.30, 0.90,   4, 30),
+            Produit("GOM-001",  "Gomme Blanche",  "Effaçage", 0.20, 0.70,  60, 10),
+            Produit("PAP-A4",   "Rame Papier A4", "Papier",   2.50, 5.00, 300, 50),
+            Produit("PAP-A3",   "Rame Papier A3", "Papier",   4.00, 8.00,   6, 10),
+            Produit("CIS-001",  "Ciseaux 17cm",   "Coupe",    1.50, 4.00,  25,  5),
+            Produit("REG-001",  "Règle 30cm",     "Mesure",   0.80, 2.00,  40, 10),
+            Produit("CAR-001",  "Carnet A5",      "Papier",   1.20, 3.50,   3, 10),
         ]
         for p in demo:
             self._produits[p.ref] = p
-        self.sauvegarder()
+            self._db.inserer_produit(p.to_dict())

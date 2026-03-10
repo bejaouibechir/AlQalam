@@ -1,4 +1,4 @@
-# [V9 - Excel] Fenêtre principale avec huit onglets :
+# [V10 - SQLite] Fenêtre principale avec neuf onglets :
 # - "📦 Stock"             : tableau produits + filtres + recherche
 # - "📊 Tableau de bord"   : KPIs + stats catégories + top 5
 # - "🔔 Alertes"           : surveillance temps réel (thread daemon) [V4]
@@ -7,10 +7,12 @@
 # - "🔍 Analyseur"         : parsing du journal par regex               [V7]
 # - "📥 CSV"               : import catalogue fournisseur + exports CSV  [V8] NEW
 # - "📊 Excel"             : rapport coloré multi-feuilles + import bon de commande [V9] NEW
+# - "🗄️ Historique"  : historique complet SQLite filtrable  [V10] NEW
 #
 # NOUVEAUTÉS V8 dans app.py :
 #   - 7ème onglet CsvFrame (import/export CSV)
 #   - CsvService : csv.DictReader/DictWriter, encoding utf-8-sig, newline=""
+# NOUVEAUTÉS V10 dans app.py : 9ème onglet HistoriqueFrame
 
 import customtkinter as ctk
 from tkinter import messagebox
@@ -29,6 +31,7 @@ from ui.frames.registre_frame      import RegistreFrame
 from ui.frames.analyseur_frame     import AnalyseurFrame      # [V7]
 from ui.frames.csv_frame           import CsvFrame            # [V8]
 from ui.frames.excel_frame         import ExcelFrame           # [V9]
+from ui.frames.historique_frame    import HistoriqueFrame      # [V10]
 from ui.frames.dialogs             import (
     DialogueProduit, DialogueMouvement, DialogueAjustement,
     DialogueFicheDetail, DialogueModification
@@ -39,7 +42,7 @@ ctk.set_default_color_theme("blue")
 
 
 class AlQalamApp(ctk.CTk):
-    """Fenêtre principale V9 — 8 onglets, Excel Export/Import actif."""
+    """Fenêtre principale V10 — 9 onglets, SQLite actif."""
 
     def __init__(self):
         super().__init__()
@@ -80,7 +83,7 @@ class AlQalamApp(ctk.CTk):
         ).pack(side="right", padx=20)
 
     def _construire_onglets(self):
-        """[V9] Huit onglets : Stock, Tableau de bord, Alertes, Journal, Registre, Analyseur, CSV, Excel."""
+        """[V10] Neuf onglets : Stock, Tableau de bord, Alertes, Journal, Registre, Analyseur, CSV, Excel, Historique."""
         self.tabs = ctk.CTkTabview(
             self, anchor="nw",
             segmented_button_selected_color=COULEUR_PRIMAIRE,
@@ -96,6 +99,7 @@ class AlQalamApp(ctk.CTk):
         self.tabs.add("🔍 Analyseur")    # [V7]
         self.tabs.add("📥 CSV")          # [V8]
         self.tabs.add("📊 Excel")        # [V9]
+        self.tabs.add("🗄️ Historique")   # [V10]
 
         callbacks = {
             "nouveau"   : self._ouvrir_dialogue_nouveau,
@@ -134,13 +138,17 @@ class AlQalamApp(ctk.CTk):
         self.excel_frame = ExcelFrame(self.tabs.tab("📊 Excel"), self.stock)
         self.excel_frame.pack(fill="both", expand=True)
 
+        # [V10] Onglet Historique — consultation SQLite des mouvements
+        self.historique_frame = HistoriqueFrame(self.tabs.tab("🗄️ Historique"), self.stock)
+        self.historique_frame.pack(fill="both", expand=True)
+
     def _construire_pied(self):
         pied = ctk.CTkFrame(self, height=25, fg_color="#ECF0F1", corner_radius=0)
         pied.pack(fill="x", side="bottom")
         pied.pack_propagate(False)
         ctk.CTkLabel(
             pied,
-            text="Al Qalam Stock Manager  |  Formation Python — Partie II  |  V9 Excel Rapport & Bon de commande",
+            text="Al Qalam Stock Manager  |  Formation Python — Partie II  |  V10 SQLite — Persistance complète & Historique",
             font=ctk.CTkFont(size=10), text_color="#7F8C8D",
         ).pack(side="left", padx=15)
 
@@ -152,7 +160,7 @@ class AlQalamApp(ctk.CTk):
     # ── Helper post-opération ─────────────────────────────────────────────
 
     def _post_operation(self):
-        """Rafraîchit les huit onglets après toute modification du stock."""
+        """Rafraîchit les neuf onglets après toute modification du stock."""
         self.stock_frame.rafraichir()
         self.rapport_frame.rafraichir()
         self.alertes_frame.rafraichir()
@@ -161,6 +169,7 @@ class AlQalamApp(ctk.CTk):
         self.analyseur_frame.rafraichir()   # [V7]
         self.csv_frame.rafraichir()         # [V8]
         self.excel_frame.rafraichir()       # [V9]
+        self.historique_frame.rafraichir()   # [V10]
 
     # ── Dialogues ─────────────────────────────────────────────────────────
 
@@ -296,5 +305,6 @@ class AlQalamApp(ctk.CTk):
             self.analyseur_frame.arreter_polling()   # [V7]
             self.csv_frame.arreter_polling()         # [V8]
             self.excel_frame.arreter_polling()       # [V9]
+            self.historique_frame.arreter_polling()  # [V10]
             self.surveillance.arreter()
             self.destroy()

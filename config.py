@@ -1,4 +1,4 @@
-# [V9 - Excel] Constantes globales du projet Al Qalam.
+# [V10 - SQLite] Constantes globales du projet Al Qalam.
 
 from pathlib import Path
 
@@ -9,10 +9,11 @@ EXPORTS_DIR = DATA_DIR / "exports"
 IMPORTS_DIR = DATA_DIR / "imports"
 CSV_DIR     = DATA_DIR / "csv"          # [V8] dossier dédié CSV
 EXCEL_DIR   = DATA_DIR / "excel"        # [V9] dossier dédié Excel
+DB_PATH     = DATA_DIR / "alqalam.db"   # [V10] base de données SQLite
 
 # ── Application ────────────────────────────────────────────────────────────
 APP_NAME    = "Al Qalam — Gestion de Stock"
-APP_VERSION = "9.0.0"
+APP_VERSION = "10.0.0"
 APP_WIDTH   = 1200
 APP_HEIGHT  = 750
 
@@ -38,9 +39,8 @@ COLONNES_MOUVEMENTS       = ["date", "type", "ref", "produit", "qte", "note"]
 COLONNES_COMPTABILITE     = ["ref", "nom", "categorie", "qte", "prix_achat", "prix_vente", "valeur_stock", "marge_unitaire", "marge_totale"]
 
 # ── Excel V9 ──────────────────────────────────────────────────────────────
-# Couleurs de remplissage pour la colorisation conditionnelle (openpyxl)
-EXCEL_COULEUR_ENTETE    = "1F4E79"   # bleu foncé — en-têtes
-EXCEL_COULEUR_RUPTURE   = "FDECEA"   # rouge pâle — stock = 0
-EXCEL_COULEUR_ALERTE    = "FEF9E7"   # orange pâle — stock ≤ seuil_min
-EXCEL_COULEUR_OK        = "EAFAF1"   # vert pâle   — stock > seuil_min
-EXCEL_COULEUR_TOTAL     = "EBF5FB"   # bleu pâle   — lignes totaux
+EXCEL_COULEUR_ENTETE    = "1F4E79"
+EXCEL_COULEUR_RUPTURE   = "FDECEA"
+EXCEL_COULEUR_ALERTE    = "FEF9E7"
+EXCEL_COULEUR_OK        = "EAFAF1"
+EXCEL_COULEUR_TOTAL     = "EBF5FB"
