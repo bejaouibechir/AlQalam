@@ -1,4 +1,4 @@
-# [V1 - Point d'entrée] main.py est le seul fichier à exécuter.
+# [V4 - Threading] main.py est le seul fichier à exécuter.
 # Il initialise l'application et démarre la boucle graphique.
 
 import sys

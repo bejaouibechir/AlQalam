@@ -1,8 +1,13 @@
-# [V3 - Compréhensions] Le service enrichi avec des méthodes utilisant
-# list/dict/set comprehensions et générateurs — plus concis et plus efficaces
-# que des boucles for + append explicites.
+# [V4 - Threading] StockService protégé par un threading.Lock.
+# Le SurveillanceService lit _produits depuis un thread secondaire ;
+# le thread principal (Tkinter) écrit dans _produits lors des opérations.
+# → Le Lock empêche une lecture partielle pendant une écriture (race condition).
+#
+# Bonne pratique : on n'acquiert le Lock que le temps strictement nécessaire
+# (pas pendant la sauvegarde JSON qui est plus longue).
 
 import json
+import threading
 from pathlib import Path
 
 from models.produit   import Produit
@@ -50,6 +55,12 @@ class StockService:
         self._produits   = {}   # dict { ref: Produit } — accès O(1) par ref
         self._mouvements = []   # liste chronologique des mouvements
         self._chemin     = DATA_DIR / "stock.json"
+
+        # [V4] Lock partagé avec SurveillanceService pour protéger _produits.
+        # Tout accès concurrent (lecture depuis le thread de surveillance,
+        # écriture depuis le thread principal) doit acquérir ce verrou.
+        self._lock = threading.Lock()
+
         # Chargement automatique au démarrage
         self.charger()
 
@@ -57,38 +68,47 @@ class StockService:
 
     def ajouter_produit(self, produit: Produit) -> None:
         """Ajoute un nouveau produit au catalogue."""
-        if produit.ref in self._produits:
-            raise ValueError(f"La référence '{produit.ref}' existe déjà dans le stock.")
-        self._produits[produit.ref] = produit
+        with self._lock:   # [V4] écriture protégée
+            if produit.ref in self._produits:
+                raise ValueError(f"La référence '{produit.ref}' existe déjà dans le stock.")
+            self._produits[produit.ref] = produit
         self.sauvegarder()
 
     def mettre_a_jour_produit(self, produit: Produit) -> None:
         """Met à jour un produit existant (utilisé par l'import CSV V8)."""
-        if produit.ref not in self._produits:
-            raise KeyError(f"Produit '{produit.ref}' introuvable.")
-        self._produits[produit.ref] = produit
+        with self._lock:   # [V4] écriture protégée
+            if produit.ref not in self._produits:
+                raise KeyError(f"Produit '{produit.ref}' introuvable.")
+            self._produits[produit.ref] = produit
         self.sauvegarder()
 
     def supprimer_produit(self, ref: str) -> None:
         """Supprime un produit du catalogue."""
-        if ref not in self._produits:
-            raise KeyError(f"Produit '{ref}' introuvable.")
-        del self._produits[ref]
+        with self._lock:   # [V4] écriture protégée
+            if ref not in self._produits:
+                raise KeyError(f"Produit '{ref}' introuvable.")
+            del self._produits[ref]
         self.sauvegarder()
 
     def get_produit(self, ref: str) -> Produit:
         """Retourne un produit par sa référence."""
-        if ref not in self._produits:
-            raise KeyError(f"Produit '{ref}' introuvable.")
-        return self._produits[ref]
+        with self._lock:   # [V4] lecture protégée
+            if ref not in self._produits:
+                raise KeyError(f"Produit '{ref}' introuvable.")
+            return self._produits[ref]
 
     def lister_tous(self) -> list[Produit]:
         """Retourne la liste complète des produits."""
-        return list(self._produits.values())
+        with self._lock:
+            return list(self._produits.values())
 
     def produits_en_alerte(self) -> list[Produit]:
-        """Retourne les produits dont la quantité est sous le seuil."""
-        return [p for p in self._produits.values() if p.est_en_alerte()]
+        """
+        Retourne les produits dont la quantité est sous le seuil.
+        [V4] Lecture protégée par Lock — appelée depuis le thread de surveillance.
+        """
+        with self._lock:
+            return [p for p in self._produits.values() if p.est_en_alerte()]
 
     def nb_alertes(self) -> int:
         """Nombre de produits en alerte (pour la barre de statut)."""
@@ -111,9 +131,14 @@ class StockService:
         """
         if qte <= 0:
             raise ValueError(f"La quantité doit être positive, reçu : {qte}")
-        produit = self.get_produit(ref)
-        produit.qte += qte
-        self._mouvements.append(Mouvement(ref, "entree", qte, note))
+        # [V4] Accès direct à _produits pour éviter le deadlock :
+        # get_produit() acquiert aussi _lock → threading.Lock n'est pas réentrant.
+        with self._lock:
+            if ref not in self._produits:
+                raise KeyError(f"Produit '{ref}' introuvable.")
+            produit = self._produits[ref]
+            produit.qte += qte
+            self._mouvements.append(Mouvement(ref, "entree", qte, note))
         self.sauvegarder()
 
     def sortie_stock(self, ref: str, qte: int, note: str = "") -> None:
@@ -131,14 +156,17 @@ class StockService:
         """
         if qte <= 0:
             raise ValueError(f"La quantité doit être positive, reçu : {qte}")
-        produit = self.get_produit(ref)
-        if produit.qte < qte:
-            raise ValueError(
-                f"Stock insuffisant pour '{produit.nom}' : "
-                f"{produit.qte} disponible, {qte} demandé."
-            )
-        produit.qte -= qte
-        self._mouvements.append(Mouvement(ref, "sortie", qte, note))
+        with self._lock:   # [V4] accès direct pour éviter le deadlock
+            if ref not in self._produits:
+                raise KeyError(f"Produit '{ref}' introuvable.")
+            produit = self._produits[ref]
+            if produit.qte < qte:
+                raise ValueError(
+                    f"Stock insuffisant pour '{produit.nom}' : "
+                    f"{produit.qte} disponible, {qte} demandé."
+                )
+            produit.qte -= qte
+            self._mouvements.append(Mouvement(ref, "sortie", qte, note))
         self.sauvegarder()
 
     def get_mouvements(self) -> list[Mouvement]:

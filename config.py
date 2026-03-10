@@ -1,4 +1,4 @@
-# [V3 - Compréhensions] Constantes globales du projet Al Qalam.
+# [V4 - Threading] Constantes globales du projet Al Qalam.
 # Modifier ici pour changer les paramètres sans toucher au code métier.
 
 from pathlib import Path
@@ -11,12 +11,17 @@ IMPORTS_DIR = DATA_DIR / "imports"          # fichiers à importer
 
 # ── Application ────────────────────────────────────────────────────────────
 APP_NAME    = "Al Qalam — Gestion de Stock"
-APP_VERSION = "3.0.0"
+APP_VERSION = "4.0.0"
 APP_WIDTH   = 1100
-APP_HEIGHT  = 680
+APP_HEIGHT  = 700
 
 # ── Stock ──────────────────────────────────────────────────────────────────
 SEUIL_MIN_DEFAUT = 5     # seuil d'alerte par défaut si non précisé
+
+# ── Surveillance (V4 Threading) ────────────────────────────────────────────
+# Intervalle (en secondes) entre deux vérifications automatiques du stock.
+# Mettre une valeur faible (ex: 10) pendant les tests pédagogiques.
+INTERVALLE_SURVEILLANCE = 20   # 20 s en démo ; 300 s (5 min) en production
 
 # ── Couleurs (thème entreprise) ────────────────────────────────────────────
 COULEUR_PRIMAIRE  = "#1F4E79"   # bleu foncé  → boutons, en-têtes
