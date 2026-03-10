@@ -1,11 +1,10 @@
-# [V6 - Métaclasses] Point d'entrée de l'application Al Qalam Stock Manager.
+# [V7 - Regex] Point d'entrée de l'application Al Qalam Stock Manager.
 #
-# Nouveautés V6 :
-#   - StockService est un Singleton (SingletonMeta) : une seule instance garantie
-#   - Les mouvements de stock utilisent un registre automatique (RegistreMouvementMeta)
-#   - 4 types de mouvements : EntreeMouvement, SortieMouvement,
-#                             AjustementMouvement, RetourMouvement
-#   - Nouvel onglet "🗂 Registre" : visualise le registre et démontre le Singleton
+# Nouveautés V7 :
+#   - Module validators/ : patterns regex compilés pour validation formulaires
+#   - Dialogues : validation en temps réel (<KeyRelease>) avec feedback ✓/✗ coloré
+#   - services/log_parser.py : convertit le journal en texte, l'analyse par regex
+#   - Nouvel onglet "🔍 Analyseur" : stats par regex, recherche regex interactive
 #
 # Lancement :
 #   py -3 main.py
@@ -19,7 +18,7 @@ from ui.app import AlQalamApp
 
 
 def main():
-    """Lance l'application Al Qalam Stock Manager V6."""
+    """Lance l'application Al Qalam Stock Manager V7."""
     app = AlQalamApp()
     app.mainloop()
 
