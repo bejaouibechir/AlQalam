@@ -1,7 +1,7 @@
-# [V2 - Méthodes Magiques] Tableau de stock enrichi avec :
-# - Tri par colonne au clic sur l'en-tête (utilise __lt__ de Produit)
-# - Double-clic pour ouvrir la fiche détail
-# - Boutons Modifier et Supprimer
+# [V3 - Compréhensions] Tableau de stock enrichi avec :
+# - Barre de recherche textuelle (filtre en temps réel via rechercher())
+# - Filtre par catégorie (dropdown)
+# Toutes les opérations de filtrage utilisent les compréhensions du service.
 
 import customtkinter as ctk
 from tkinter import ttk, messagebox
@@ -37,9 +37,11 @@ class StockFrame(ctk.CTkFrame):
         super().__init__(parent, fg_color="transparent")
         self.stock     = stock_service
         self.callbacks = callbacks
-        # État du tri : colonne active et sens (True = croissant)
         self._tri_colonne = None
         self._tri_asc     = True
+        # [V3] Texte de recherche et catégorie filtre actifs
+        self._filtre_texte = ""
+        self._filtre_cat   = "Toutes"
         self._construire()
         self.rafraichir()
 
@@ -53,6 +55,7 @@ class StockFrame(ctk.CTkFrame):
         ).pack(anchor="w", padx=15, pady=(10, 5))
 
         self._construire_barre_actions()
+        self._construire_barre_filtres()   # [V3] nouveau
         self._construire_tableau()
         self._construire_barre_statut()
 
@@ -87,6 +90,37 @@ class StockFrame(ctk.CTkFrame):
         ctk.CTkButton(barre, text="⟳",           width=50,
                       fg_color="#7F8C8D", hover_color="#616A6B",
                       command=self.rafraichir).pack(side="left")
+
+    def _construire_barre_filtres(self):
+        """
+        [V3] Barre de recherche + filtre par catégorie.
+        La recherche appelle stock.rechercher() (list comprehension).
+        Le filtre catégorie utilise par_categorie() (dict comprehension).
+        """
+        barre = ctk.CTkFrame(self, fg_color="transparent")
+        barre.pack(fill="x", padx=15, pady=(0, 4))
+
+        # Champ de recherche textuelle
+        ctk.CTkLabel(barre, text="🔍", font=ctk.CTkFont(size=14)).pack(side="left", padx=(0, 4))
+        self.e_recherche = ctk.CTkEntry(barre, placeholder_text="Rechercher...",
+                                         width=220, height=32)
+        self.e_recherche.pack(side="left", padx=(0, 12))
+        # [V3] Filtre pendant la frappe — trace la variable
+        self.e_recherche.bind("<KeyRelease>", self._on_recherche)
+
+        # Filtre par catégorie
+        ctk.CTkLabel(barre, text="Catégorie :",
+                     font=ctk.CTkFont(size=12)).pack(side="left", padx=(0, 4))
+        cats = ["Toutes"] + sorted({p.categorie for p in self.stock})   # set comprehension
+        self.combo_cat = ctk.CTkOptionMenu(barre, values=cats, width=150, height=32,
+                                            command=self._on_filtre_cat)
+        self.combo_cat.pack(side="left")
+
+        # Label compteur de résultats
+        self.lbl_resultats = ctk.CTkLabel(barre, text="",
+                                           font=ctk.CTkFont(size=11),
+                                           text_color="#7F8C8D")
+        self.lbl_resultats.pack(side="right", padx=5)
 
     def _construire_tableau(self):
         cadre = ctk.CTkFrame(self, fg_color="white", corner_radius=8)
@@ -148,12 +182,20 @@ class StockFrame(ctk.CTkFrame):
     # ── Données ───────────────────────────────────────────────────────────
 
     def rafraichir(self):
-        """Recharge et réaffiche tous les produits."""
+        """
+        Recharge le tableau en appliquant les filtres actifs.
+        [V3] Utilise stock.rechercher() (list comprehension) pour le filtre texte.
+        """
         for item in self.tableau.get_children():
             self.tableau.delete(item)
 
-        # [V2] sorted() utilise __lt__ de Produit (tri par nom par défaut)
-        produits = self._produits_tries()
+        # [V3] Filtrage : recherche textuelle → puis filtre catégorie
+        produits = self.stock.rechercher(self._filtre_texte)   # list comprehension
+        if self._filtre_cat != "Toutes":
+            produits = [p for p in produits if p.categorie == self._filtre_cat]
+
+        # Tri
+        produits = self._appliquer_tri(produits)
         nb_alertes = 0
 
         for i, p in enumerate(produits):
@@ -167,21 +209,36 @@ class StockFrame(ctk.CTkFrame):
                 p.qte, p.seuil_min, p.statut_label(),
             ))
 
+        # Mise à jour compteur résultats
+        total = len(self.stock)
+        affich = len(produits)
+        self.lbl_resultats.configure(
+            text="" if affich == total else f"{affich} / {total} résultats"
+        )
+
         self.lbl_statut.configure(
-            text=f"📦 {len(self.stock)} produit(s)  |  "   # utilise __len__
-                 f"Valeur : {self.stock.valeur_totale_stock():.2f} TND"
+            text=f"📦 {total} produit(s)  |  Valeur : {self.stock.valeur_totale_stock():.2f} TND"
         )
         self.lbl_alertes.configure(
             text=f"⚠️  {nb_alertes} alerte(s)" if nb_alertes > 0 else "✅ Aucune alerte"
         )
 
-    def _produits_tries(self) -> list:
-        """
-        Retourne les produits dans l'ordre de tri actif.
-        [V2] Utilise sorted() avec key selon la colonne sélectionnée.
-        sorted() exploite __lt__ de Produit quand aucune key n'est précisée.
-        """
-        produits = list(self.stock)   # utilise __iter__
+        # Rafraîchir aussi le dropdown catégories (un produit peut avoir été ajouté)
+        cats = ["Toutes"] + sorted({p.categorie for p in self.stock})
+        self.combo_cat.configure(values=cats)
+
+    def _on_recherche(self, _event=None):
+        """[V3] Déclenché à chaque frappe — met à jour le filtre texte."""
+        self._filtre_texte = self.e_recherche.get()
+        self.rafraichir()
+
+    def _on_filtre_cat(self, valeur: str):
+        """[V3] Déclenché au changement de catégorie dans le dropdown."""
+        self._filtre_cat = valeur
+        self.rafraichir()
+
+    def _appliquer_tri(self, produits: list) -> list:
+        """Trie la liste fournie selon la colonne active."""
         if self._tri_colonne is None or self._tri_colonne == "nom":
             # Tri par défaut : alphabétique par nom → utilise __lt__
             return sorted(produits, reverse=not self._tri_asc)

@@ -5,7 +5,7 @@ title Al Qalam — Gestion de Stock
 echo.
 echo  ╔══════════════════════════════════════════╗
 echo  ║    📚  Al Qalam — Gestion de Stock       ║
-echo  ║            Version 2.0.0                 ║
+echo  ║            Version 3.0.0                 ║
 echo  ╚══════════════════════════════════════════╝
 echo.
 

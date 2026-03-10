@@ -1,6 +1,6 @@
-# [V2 - Méthodes Magiques] Le service enrichi avec des comportements natifs Python.
-# __len__, __contains__, __iter__ permettent d'utiliser StockService comme
-# un conteneur Python standard : len(stock), "ref" in stock, for p in stock.
+# [V3 - Compréhensions] Le service enrichi avec des méthodes utilisant
+# list/dict/set comprehensions et générateurs — plus concis et plus efficaces
+# que des boucles for + append explicites.
 
 import json
 from pathlib import Path
@@ -154,6 +154,70 @@ class StockService:
     def nb_produits(self) -> int:
         """Nombre total de références en stock."""
         return len(self._produits)
+
+    # ── Méthodes V3 — Compréhensions et Générateurs ───────────────────────
+    # Chaque méthode remplace une boucle for+append par une expression concise.
+
+    def par_categorie(self) -> dict:
+        """
+        Regroupe les produits par catégorie.
+        [V3] Dict comprehension imbriqué dans une set comprehension.
+        """
+        # Set comprehension : toutes les catégories uniques
+        categories = {p.categorie for p in self._produits.values()}
+        # Dict comprehension : { catégorie → [liste de produits] }
+        return {
+            cat: [p for p in self._produits.values() if p.categorie == cat]
+            for cat in sorted(categories)
+        }
+
+    def top_valeur(self, n: int = 5) -> list:
+        """
+        Top N produits par valeur de stock.
+        [V3] sorted() + slicing en une ligne — pas de boucle.
+        """
+        return sorted(self._produits.values(),
+                      key=lambda p: p.valeur_stock(),
+                      reverse=True)[:n]
+
+    def rechercher(self, texte: str) -> list:
+        """
+        Filtre multi-champs : ref, nom ou catégorie contiennent le texte.
+        [V3] List comprehension avec condition composée.
+        """
+        t = texte.lower().strip()
+        if not t:
+            return list(self._produits.values())
+        return [
+            p for p in self._produits.values()
+            if t in p.ref.lower() or t in p.nom.lower() or t in p.categorie.lower()
+        ]
+
+    def stats_categories(self) -> dict:
+        """
+        Statistiques agrégées par catégorie.
+        [V3] Dict comprehension avec expression génératrice dans sum().
+        Retourne : { cat → { nb_produits, valeur_totale, nb_alertes } }
+        """
+        return {
+            cat: {
+                "nb_produits"  : len(prods),
+                "valeur_totale": sum(p.valeur_stock() for p in prods),   # générateur
+                "nb_alertes"   : sum(1 for p in prods if p.est_en_alerte()),  # générateur
+            }
+            for cat, prods in self.par_categorie().items()
+        }
+
+    def flux_export(self):
+        """
+        Générateur de lignes CSV — produit les données une par une.
+        [V3] yield : économe en mémoire (pas de liste intermédiaire).
+        Utilisable : for ligne in stock.flux_export(): ...
+        """
+        yield ["ref", "nom", "categorie", "prix_achat", "prix_vente", "qte", "seuil_min"]
+        for p in sorted(self._produits.values()):   # __lt__ de Produit
+            yield [p.ref, p.nom, p.categorie,
+                   p.prix_achat, p.prix_vente, p.qte, p.seuil_min]
 
     # ── Méthodes Magiques V2 ──────────────────────────────────────────────
     # Ces méthodes font de StockService un conteneur Python natif.
