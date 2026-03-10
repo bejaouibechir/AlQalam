@@ -42,7 +42,7 @@ ctk.set_default_color_theme("blue")
 
 
 class AlQalamApp(ctk.CTk):
-    """Fenêtre principale V10 — 9 onglets, SQLite actif."""
+    """Fenêtre principale V11 — 9 onglets, SQLite + Tests pytest."""
 
     def __init__(self):
         super().__init__()
@@ -148,7 +148,7 @@ class AlQalamApp(ctk.CTk):
         pied.pack_propagate(False)
         ctk.CTkLabel(
             pied,
-            text="Al Qalam Stock Manager  |  Formation Python — Partie II  |  V10 SQLite — Persistance complète & Historique",
+            text="Al Qalam Stock Manager  |  Formation Python — Partie II  |  V11 — Suite de tests pytest · Couverture >= 80%",
             font=ctk.CTkFont(size=10), text_color="#7F8C8D",
         ).pack(side="left", padx=15)
 

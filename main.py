@@ -1,16 +1,19 @@
-# [V10 - SQLite] Point d'entrée de l'application Al Qalam Stock Manager.
+# [V11 - Tests] Point d'entrée de l'application Al Qalam Stock Manager.
 #
-# Nouveautés V10 :
-#   - services/database_service.py : sqlite3 stdlib — schéma 2 tables (produits + mouvements)
-#   - StockService : persistance SQLite au lieu de JSON, mouvements historisés en base
-#   - Migration automatique : stock.json → alqalam.db au 1er lancement
-#   - Nouvel onglet "🗄️ Historique" : requêtes filtrées, stats, export CSV
+# Nouveautés V11 :
+#   - Suite de tests pytest dans tests/ : 6 fichiers, >40 cas de test
+#   - Couverture mesurée avec pytest-cov (objectif >= 80%)
+#   - conftest.py : fixtures partagées (db_vide, stock_vide, produit_demo)
+#   - Démonstration : fixtures, parametrize, raises, tmp_path, monkeypatch
 #
-# Prérequis : py -3 -m pip install openpyxl customtkinter
-# (sqlite3 est dans la bibliothèque standard Python — aucun pip requis)
+# Prérequis : py -3 -m pip install openpyxl customtkinter pytest pytest-cov
 #
-# Lancement :
+# Lancement application :
 #   py -3 main.py
+#
+# Lancement tests :
+#   py -3 -m pytest tests/ -v
+#   py -3 -m pytest tests/ --cov=. --cov-report=term-missing
 
 import sys
 from pathlib import Path
@@ -21,7 +24,7 @@ from ui.app import AlQalamApp
 
 
 def main():
-    """Lance l'application Al Qalam Stock Manager V10."""
+    """Lance l'application Al Qalam Stock Manager V11."""
     app = AlQalamApp()
     app.mainloop()
 

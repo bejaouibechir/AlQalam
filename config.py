@@ -1,4 +1,4 @@
-# [V10 - SQLite] Constantes globales du projet Al Qalam.
+# [V11 - Tests] Constantes globales du projet Al Qalam.
 
 from pathlib import Path
 
@@ -13,7 +13,7 @@ DB_PATH     = DATA_DIR / "alqalam.db"   # [V10] base de données SQLite
 
 # ── Application ────────────────────────────────────────────────────────────
 APP_NAME    = "Al Qalam — Gestion de Stock"
-APP_VERSION = "10.0.0"
+APP_VERSION = "11.0.0"
 APP_WIDTH   = 1200
 APP_HEIGHT  = 750
 

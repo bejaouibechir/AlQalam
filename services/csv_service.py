@@ -219,16 +219,17 @@ class CsvService:
             writer.writeheader()
 
             for m in mouvements:
-                # Récupérer le nom du produit si disponible
+                # [V11] Correction : l'attribut s'appelle ref_produit (pas ref)
+                ref_prod = m.ref_produit
                 try:
-                    nom_produit = self._stock.get_produit(m.ref).nom
+                    nom_produit = self._stock.get_produit(ref_prod).nom
                 except KeyError:
-                    nom_produit = m.ref
+                    nom_produit = ref_prod
 
                 writer.writerow({
-                    "date"   : m.date.strftime("%Y-%m-%d %H:%M:%S"),
+                    "date"   : m.date,
                     "type"   : m.type_mvt,
-                    "ref"    : m.ref,
+                    "ref"    : ref_prod,
                     "produit": nom_produit,
                     "qte"    : m.qte,
                     "note"   : m.note,
