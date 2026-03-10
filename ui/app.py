@@ -1,15 +1,14 @@
-# [V8 - CSV] Fenêtre principale avec sept onglets :
+# [V7 - Regex] Fenêtre principale avec six onglets :
 # - "📦 Stock"             : tableau produits + filtres + recherche
 # - "📊 Tableau de bord"   : KPIs + stats catégories + top 5
 # - "🔔 Alertes"           : surveillance temps réel (thread daemon) [V4]
 # - "📋 Journal"           : historique d'audit des opérations décorées [V5]
 # - "🗂 Registre"          : registre métaclasses + démo Singleton      [V6]
-# - "🔍 Analyseur"         : parsing du journal par regex               [V7]
-# - "📥 CSV"               : import catalogue fournisseur + exports CSV  [V8] NEW
+# - "🔍 Analyseur"         : parsing du journal par regex               [V7] NEW
 #
-# NOUVEAUTÉS V8 dans app.py :
-#   - 7ème onglet CsvFrame (import/export CSV)
-#   - CsvService : csv.DictReader/DictWriter, encoding utf-8-sig, newline=""
+# NOUVEAUTÉS V7 dans app.py :
+#   - 6ème onglet AnalyseurFrame (log_parser + regex_validators)
+#   - Dialogues : validation en temps réel par regex (feedback ✓/✗)
 
 import customtkinter as ctk
 from tkinter import messagebox
@@ -26,7 +25,6 @@ from ui.frames.alertes_frame       import AlertesFrame
 from ui.frames.journal_frame       import JournalFrame
 from ui.frames.registre_frame      import RegistreFrame
 from ui.frames.analyseur_frame     import AnalyseurFrame      # [V7]
-from ui.frames.csv_frame           import CsvFrame            # [V8]
 from ui.frames.dialogs             import (
     DialogueProduit, DialogueMouvement, DialogueAjustement,
     DialogueFicheDetail, DialogueModification
@@ -37,7 +35,7 @@ ctk.set_default_color_theme("blue")
 
 
 class AlQalamApp(ctk.CTk):
-    """Fenêtre principale V8 — 7 onglets, CSV Import/Export actif."""
+    """Fenêtre principale V7 — 6 onglets, regex validators + log analyser actifs."""
 
     def __init__(self):
         super().__init__()
@@ -78,7 +76,7 @@ class AlQalamApp(ctk.CTk):
         ).pack(side="right", padx=20)
 
     def _construire_onglets(self):
-        """[V8] Sept onglets : Stock, Tableau de bord, Alertes, Journal, Registre, Analyseur, CSV."""
+        """[V7] Six onglets : Stock, Tableau de bord, Alertes, Journal, Registre, Analyseur."""
         self.tabs = ctk.CTkTabview(
             self, anchor="nw",
             segmented_button_selected_color=COULEUR_PRIMAIRE,
@@ -92,7 +90,6 @@ class AlQalamApp(ctk.CTk):
         self.tabs.add("📋 Journal")
         self.tabs.add("🗂 Registre")
         self.tabs.add("🔍 Analyseur")    # [V7]
-        self.tabs.add("📥 CSV")          # [V8]
 
         callbacks = {
             "nouveau"   : self._ouvrir_dialogue_nouveau,
@@ -123,17 +120,13 @@ class AlQalamApp(ctk.CTk):
         self.analyseur_frame = AnalyseurFrame(self.tabs.tab("🔍 Analyseur"), self.stock)
         self.analyseur_frame.pack(fill="both", expand=True)
 
-        # [V8] Onglet CSV — import catalogue fournisseur + exports comptabilité
-        self.csv_frame = CsvFrame(self.tabs.tab("📥 CSV"), self.stock)
-        self.csv_frame.pack(fill="both", expand=True)
-
     def _construire_pied(self):
         pied = ctk.CTkFrame(self, height=25, fg_color="#ECF0F1", corner_radius=0)
         pied.pack(fill="x", side="bottom")
         pied.pack_propagate(False)
         ctk.CTkLabel(
             pied,
-            text="Al Qalam Stock Manager  |  Formation Python — Partie II  |  V8 CSV Import/Export",
+            text="Al Qalam Stock Manager  |  Formation Python — Partie II  |  V7 Expressions Régulières",
             font=ctk.CTkFont(size=10), text_color="#7F8C8D",
         ).pack(side="left", padx=15)
 
@@ -145,14 +138,13 @@ class AlQalamApp(ctk.CTk):
     # ── Helper post-opération ─────────────────────────────────────────────
 
     def _post_operation(self):
-        """Rafraîchit les sept onglets après toute modification du stock."""
+        """Rafraîchit les six onglets après toute modification du stock."""
         self.stock_frame.rafraichir()
         self.rapport_frame.rafraichir()
         self.alertes_frame.rafraichir()
         self.journal_frame.rafraichir()
         self.registre_frame.rafraichir()
         self.analyseur_frame.rafraichir()   # [V7]
-        self.csv_frame.rafraichir()         # [V8]
 
     # ── Dialogues ─────────────────────────────────────────────────────────
 
@@ -286,6 +278,5 @@ class AlQalamApp(ctk.CTk):
             self.journal_frame.arreter_polling()
             self.registre_frame.arreter_polling()
             self.analyseur_frame.arreter_polling()   # [V7]
-            self.csv_frame.arreter_polling()         # [V8]
             self.surveillance.arreter()
             self.destroy()
