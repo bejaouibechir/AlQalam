@@ -1,13 +1,8 @@
-# [V4 - Threading] Fenêtre principale avec trois onglets :
+# [V5 - Décorateurs] Fenêtre principale avec quatre onglets :
 # - "📦 Stock"             : tableau produits + filtres + recherche
 # - "📊 Tableau de bord"   : KPIs + stats catégories + top 5
-# - "🔔 Alertes"           : surveillance temps réel (thread daemon)
-#
-# Cycle de vie du thread de surveillance :
-#   __init__ → demarrer() → [thread tourne en fond] → _quitter() → arreter()
-#
-# Communication thread → UI :
-#   SurveillanceService écrit dans Queue → AlertesFrame lit via after() 500 ms
+# - "🔔 Alertes"           : surveillance temps réel (thread daemon) [V4]
+# - "📋 Journal"           : historique d'audit des opérations décorées [V5]
 
 import customtkinter as ctk
 from tkinter import messagebox
@@ -17,10 +12,11 @@ from config import (
     COULEUR_PRIMAIRE, INTERVALLE_SURVEILLANCE
 )
 from services.stock_service        import StockService
-from services.surveillance_service import SurveillanceService   # [V4]
+from services.surveillance_service import SurveillanceService
 from ui.frames.stock_frame         import StockFrame
 from ui.frames.rapport_frame       import RapportFrame
-from ui.frames.alertes_frame       import AlertesFrame            # [V4]
+from ui.frames.alertes_frame       import AlertesFrame
+from ui.frames.journal_frame       import JournalFrame      # [V5]
 from ui.frames.dialogs             import (
     DialogueProduit, DialogueMouvement,
     DialogueFicheDetail, DialogueModification
@@ -31,37 +27,27 @@ ctk.set_default_color_theme("blue")
 
 
 class AlQalamApp(ctk.CTk):
-    """Fenêtre principale V4 — Stock + Tableau de bord + Alertes (threading)."""
+    """Fenêtre principale V5 — 4 onglets, décorateurs + descripteurs actifs."""
 
     def __init__(self):
         super().__init__()
         self.title(f"{APP_NAME}  —  v{APP_VERSION}")
         self.geometry(f"{APP_WIDTH}x{APP_HEIGHT}")
-        self.minsize(900, 620)
+        self.minsize(950, 640)
 
         x = (self.winfo_screenwidth()  - APP_WIDTH)  // 2
         y = (self.winfo_screenheight() - APP_HEIGHT) // 2
         self.geometry(f"{APP_WIDTH}x{APP_HEIGHT}+{x}+{y}")
 
-        # ── Services ──────────────────────────────────────────────────────
-        self.stock = StockService()
-
-        # [V4] SurveillanceService encapsule le thread daemon et la Queue
+        self.stock        = StockService()   # [V5] contient maintenant _journal
         self.surveillance = SurveillanceService(
-            self.stock,
-            intervalle=INTERVALLE_SURVEILLANCE,
+            self.stock, intervalle=INTERVALLE_SURVEILLANCE
         )
 
-        # ── Construction de l'interface ────────────────────────────────────
         self._construire_entete()
         self._construire_onglets()
         self._construire_pied()
-
-        # ── Protocole fermeture ─────────────────────────────────────────────
         self.protocol("WM_DELETE_WINDOW", self._quitter)
-
-        # ── Démarrage du thread après que les widgets soient prêts ──────────
-        # after(100) : Tkinter mainloop est déjà active, les widgets sont rendus.
         self.after(100, self._demarrer_surveillance)
 
     # ── Construction ───────────────────────────────────────────────────────
@@ -78,10 +64,7 @@ class AlQalamApp(ctk.CTk):
                      text_color="#A9CCE3").pack(side="right", padx=20)
 
     def _construire_onglets(self):
-        """
-        [V4] Trois onglets : Stock, Tableau de bord, Alertes.
-        L'onglet Alertes contient AlertesFrame qui poll la Queue toutes les 500 ms.
-        """
+        """[V5] Quatre onglets : Stock, Tableau de bord, Alertes, Journal."""
         self.tabs = ctk.CTkTabview(self, anchor="nw",
                                     segmented_button_selected_color=COULEUR_PRIMAIRE,
                                     segmented_button_selected_hover_color="#163D61")
@@ -89,9 +72,9 @@ class AlQalamApp(ctk.CTk):
 
         self.tabs.add("📦 Stock")
         self.tabs.add("📊 Tableau de bord")
-        self.tabs.add("🔔 Alertes")          # [V4] nouvel onglet
+        self.tabs.add("🔔 Alertes")
+        self.tabs.add("📋 Journal")      # [V5] nouvel onglet
 
-        # Onglet Stock
         callbacks = {
             "nouveau"  : self._ouvrir_dialogue_nouveau,
             "entree"   : self._ouvrir_dialogue_entree,
@@ -103,42 +86,39 @@ class AlQalamApp(ctk.CTk):
         self.stock_frame = StockFrame(self.tabs.tab("📦 Stock"), self.stock, callbacks)
         self.stock_frame.pack(fill="both", expand=True)
 
-        # Onglet Tableau de bord
         self.rapport_frame = RapportFrame(self.tabs.tab("📊 Tableau de bord"), self.stock)
         self.rapport_frame.pack(fill="both", expand=True)
 
-        # [V4] Onglet Alertes
-        self.alertes_frame = AlertesFrame(
-            self.tabs.tab("🔔 Alertes"),
-            self.surveillance,
-        )
+        self.alertes_frame = AlertesFrame(self.tabs.tab("🔔 Alertes"), self.surveillance)
         self.alertes_frame.pack(fill="both", expand=True)
+
+        # [V5] JournalFrame reçoit stock pour accéder à stock.journal
+        self.journal_frame = JournalFrame(self.tabs.tab("📋 Journal"), self.stock)
+        self.journal_frame.pack(fill="both", expand=True)
 
     def _construire_pied(self):
         pied = ctk.CTkFrame(self, height=25, fg_color="#ECF0F1", corner_radius=0)
         pied.pack(fill="x", side="bottom")
         pied.pack_propagate(False)
-        ctk.CTkLabel(pied,
-                     text="Al Qalam Stock Manager  |  Formation Python — Partie II  |  V4 Threading",
-                     font=ctk.CTkFont(size=10),
-                     text_color="#7F8C8D").pack(side="left", padx=15)
+        ctk.CTkLabel(
+            pied,
+            text="Al Qalam Stock Manager  |  Formation Python — Partie II  |  V5 Décorateurs & Descripteurs",
+            font=ctk.CTkFont(size=10), text_color="#7F8C8D"
+        ).pack(side="left", padx=15)
 
-    # ── Threading ──────────────────────────────────────────────────────────
+    # ── Threading (V4) ────────────────────────────────────────────────────
 
     def _demarrer_surveillance(self) -> None:
-        """
-        [V4] Lance le thread de surveillance après démarrage complet de l'UI.
-        Appelé via after(100) pour que la mainloop soit active.
-        """
         self.surveillance.demarrer()
 
-    # ── Helper ─────────────────────────────────────────────────────────────
+    # ── Helper ────────────────────────────────────────────────────────────
 
     def _post_operation(self):
-        """Rafraîchit les trois onglets après toute modification du stock."""
+        """Rafraîchit les quatre onglets après toute modification du stock."""
         self.stock_frame.rafraichir()
         self.rapport_frame.rafraichir()
-        self.alertes_frame.rafraichir()   # [V4]
+        self.alertes_frame.rafraichir()
+        self.journal_frame.rafraichir()   # [V5]
 
     # ── Dialogues ─────────────────────────────────────────────────────────
 
@@ -228,10 +208,7 @@ class AlQalamApp(ctk.CTk):
 
     def _quitter(self):
         if messagebox.askyesno("Quitter", "Voulez-vous quitter Al Qalam ?"):
-            # [V4] Arrêt propre dans l'ordre :
-            #  1. Stopper le polling after() (sinon Tkinter appelle encore le callback)
-            #  2. Signaler l'arrêt au thread via Event.set()
-            #  3. Attendre la fin du thread via Thread.join()
             self.alertes_frame.arreter_polling()
+            self.journal_frame.arreter_polling()   # [V5]
             self.surveillance.arreter()
             self.destroy()

@@ -1,4 +1,4 @@
-# [V4 - Threading] Constantes globales du projet Al Qalam.
+# [V5 - Décorateurs] Constantes globales du projet Al Qalam.
 # Modifier ici pour changer les paramètres sans toucher au code métier.
 
 from pathlib import Path
@@ -11,7 +11,7 @@ IMPORTS_DIR = DATA_DIR / "imports"          # fichiers à importer
 
 # ── Application ────────────────────────────────────────────────────────────
 APP_NAME    = "Al Qalam — Gestion de Stock"
-APP_VERSION = "4.0.0"
+APP_VERSION = "5.0.0"
 APP_WIDTH   = 1100
 APP_HEIGHT  = 700
 
