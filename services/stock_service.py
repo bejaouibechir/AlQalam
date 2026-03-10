@@ -1,14 +1,21 @@
-# [V5 - Décorateurs] StockService décoré avec @journaliser et @valider_qte.
+# [V6 - Métaclasses] StockService utilise SingletonMeta pour garantir une
+# instance unique, et Mouvement.fabriquer() pour créer le bon type via le registre.
 #
-# Les décorateurs s'appliquent comme des "couches" autour des méthodes :
-#   entree_stock() → valider_qte() vérifie d'abord la quantité
-#                  → journaliser() enregistre le résultat (succès ou échec)
-#                  → le corps de la méthode s'exécute si les validations passent
+# CHANGEMENTS V6 :
+#   1. class StockService(metaclass=SingletonMeta)
+#      → StockService() retourne TOUJOURS la même instance
+#      → id(StockService()) == id(StockService())  →  True
 #
-# Ordre des décorateurs (bas → haut = premier exécuté en dernier) :
-#   @journaliser("entree")        ← exécuté EN PREMIER (enveloppe externe)
-#   @valider_qte(min_val=1)       ← exécuté EN SECOND  (enveloppe interne)
-#   def entree_stock(self, ...):  ← corps original
+#   2. import models.types_mouvement  (force l'enregistrement des 4 sous-classes)
+#      → après cet import, RegistreMouvementMeta._registre contient :
+#        {"entree": EntreeMouvement, "sortie": SortieMouvement,
+#         "ajustement": AjustementMouvement, "retour": RetourMouvement}
+#
+#   3. entree_stock / sortie_stock utilisent Mouvement.fabriquer(type, ...)
+#      → au lieu de Mouvement(ref, type, qte, note) directement
+#
+#   4. Nouvelle méthode : ajustement_stock(ref, qte_cible, note)
+#      → inventaire physique : règle la quantité à une valeur absolue cible
 
 import json
 import threading
@@ -16,10 +23,12 @@ from pathlib import Path
 
 from models.produit    import Produit
 from models.mouvement  import Mouvement
+import models.types_mouvement          # [V6] force l'enregistrement des 4 types
 from config            import DATA_DIR
-from decorateurs.journalisation import journaliser
-from decorateurs.validation     import valider_qte, valider_ref
-from services.journal_service   import JournalService
+from metaclasses.singleton             import SingletonMeta
+from decorateurs.journalisation        import journaliser
+from decorateurs.validation            import valider_qte
+from services.journal_service          import JournalService
 
 
 # ── Context Manager (V2) ───────────────────────────────────────────────────────
@@ -43,29 +52,34 @@ class FichierStock:
 
 # ── StockService ──────────────────────────────────────────────────────────────
 
-class StockService:
+class StockService(metaclass=SingletonMeta):
     """
-    Gère l'ensemble du stock : ajout, entrée, sortie, persistance.
+    Gère l'ensemble du stock : ajout, entrée, sortie, ajustement, persistance.
 
-    [V5] Les méthodes critiques sont décorées avec :
-      @journaliser(op)   → logging automatique dans self._journal
-      @valider_qte(...)  → validation de quantité avant exécution
-      @valider_ref       → normalisation et validation de la référence
+    [V6] Singleton garanti par SingletonMeta :
+      - Premier appel  : StockService() → crée l'instance, charge le stock
+      - Appels suivants: StockService() → retourne la même instance (sans __init__)
+      - Preuve : assert StockService() is StockService()  →  True
+
+    [V6] Types de mouvements étendus via le registre RegistreMouvementMeta :
+      - entree     → EntreeMouvement
+      - sortie     → SortieMouvement
+      - ajustement → AjustementMouvement  (nouveau V6)
+      - retour     → RetourMouvement      (nouveau V6)
     """
 
     def __init__(self):
         self._produits   = {}   # dict { ref: Produit }
-        self._mouvements = []   # liste chronologique
+        self._mouvements = []   # liste chronologique de Mouvement (sous-classes)
         self._chemin     = DATA_DIR / "stock.json"
-        self._lock       = threading.Lock()    # [V4] protection thread
-        self._journal    = JournalService()    # [V5] journal des opérations
+        self._lock       = threading.Lock()
+        self._journal    = JournalService()
         self.charger()
 
     # ── Propriété publique vers le journal (pour l'UI) ────────────────────
 
     @property
     def journal(self) -> JournalService:
-        """Expose le journal en lecture seule pour l'UI."""
         return self._journal
 
     # ── Gestion des produits ──────────────────────────────────────────────
@@ -98,17 +112,16 @@ class StockService:
         self.sauvegarder()
 
     def get_produit(self, ref: str) -> Produit:
-        """Retourne un produit par sa référence."""
         with self._lock:
             if ref not in self._produits:
                 raise KeyError(f"Produit '{ref}' introuvable.")
             return self._produits[ref]
 
-    def lister_tous(self) -> list[Produit]:
+    def lister_tous(self) -> list:
         with self._lock:
             return list(self._produits.values())
 
-    def produits_en_alerte(self) -> list[Produit]:
+    def produits_en_alerte(self) -> list:
         with self._lock:
             return [p for p in self._produits.values() if p.est_en_alerte()]
 
@@ -116,8 +129,6 @@ class StockService:
         return len(self.produits_en_alerte())
 
     # ── Mouvements de stock ───────────────────────────────────────────────
-    # [V5] Double décoration : @journaliser (externe) puis @valider_qte (interne).
-    # L'ordre est important : le journal capture aussi les erreurs de validation.
 
     @journaliser("entree")
     @valider_qte(min_val=1, max_val=100_000)
@@ -125,17 +136,16 @@ class StockService:
         """
         Enregistre une entrée de stock (réception marchandise).
 
-        [V5] @valider_qte vérifie que qte est un entier dans [1, 100_000]
-             AVANT d'entrer dans le corps de la méthode.
-             @journaliser enregistre l'opération dans le journal, y compris
-             si @valider_qte a levé une exception.
+        [V6] Utilise Mouvement.fabriquer("entree", ...) qui retourne
+             une instance de EntreeMouvement (pas de Mouvement de base).
         """
         with self._lock:
             if ref not in self._produits:
                 raise KeyError(f"Produit '{ref}' introuvable.")
             produit = self._produits[ref]
             produit.qte += qte
-            self._mouvements.append(Mouvement(ref, "entree", qte, note))
+            # [V6] fabriquer() consulte le registre → crée EntreeMouvement
+            self._mouvements.append(Mouvement.fabriquer("entree", ref, qte, note))
         self.sauvegarder()
 
     @journaliser("sortie")
@@ -144,7 +154,7 @@ class StockService:
         """
         Enregistre une sortie de stock (vente ou consommation).
 
-        [V5] Double décoration identique à entree_stock.
+        [V6] Crée SortieMouvement via le registre.
         """
         with self._lock:
             if ref not in self._produits:
@@ -156,11 +166,89 @@ class StockService:
                     f"{produit.qte} disponible, {qte} demandé."
                 )
             produit.qte -= qte
-            self._mouvements.append(Mouvement(ref, "sortie", qte, note))
+            self._mouvements.append(Mouvement.fabriquer("sortie", ref, qte, note))
         self.sauvegarder()
 
-    def get_mouvements(self) -> list[Mouvement]:
+    @journaliser("ajustement")
+    def ajustement_stock(self, ref: str, qte_cible: int, note: str = "") -> None:
+        """
+        [V6] Ajuste le stock à une quantité cible (inventaire physique).
+
+        Cas d'usage : comptage physique révèle que le stock réel diffère
+        du stock théorique. L'ajustement corrige l'écart.
+
+        Args:
+            ref       : référence du produit
+            qte_cible : nouvelle quantité absolue (résultat du comptage)
+            note      : raison de l'ajustement (casse, vol, erreur saisie…)
+        """
+        with self._lock:
+            if ref not in self._produits:
+                raise KeyError(f"Produit '{ref}' introuvable.")
+            produit  = self._produits[ref]
+            qte_avant = produit.qte
+            delta    = qte_cible - qte_avant
+
+            # La quantité cible doit être positive ou nulle
+            if qte_cible < 0:
+                raise ValueError(f"La quantité cible ne peut pas être négative : {qte_cible}")
+
+            produit.qte = qte_cible
+            # AjustementMouvement avec delta (peut être 0 si pas de changement)
+            note_auto = note or f"Inventaire : {qte_avant}→{qte_cible} (Δ{delta:+d})"
+            self._mouvements.append(
+                Mouvement.fabriquer("ajustement", ref, abs(delta) or 1, note_auto)
+            )
+        self.sauvegarder()
+
+    @journaliser("retour")
+    @valider_qte(min_val=1, max_val=100_000)
+    def retour_stock(self, ref: str, qte: int, note: str = "") -> None:
+        """
+        [V6] Enregistre un retour fournisseur (marchandise renvoyée).
+
+        Le stock diminue (retour = sortie comptable) mais est catégorisé
+        séparément pour les rapports fournisseurs.
+        """
+        with self._lock:
+            if ref not in self._produits:
+                raise KeyError(f"Produit '{ref}' introuvable.")
+            produit = self._produits[ref]
+            if produit.qte < qte:
+                raise ValueError(
+                    f"Stock insuffisant pour un retour de '{produit.nom}' : "
+                    f"{produit.qte} disponible, {qte} à retourner."
+                )
+            produit.qte -= qte
+            self._mouvements.append(Mouvement.fabriquer("retour", ref, qte, note))
+        self.sauvegarder()
+
+    def get_mouvements(self) -> list:
         return list(self._mouvements)
+
+    def stats_par_type(self) -> dict:
+        """
+        [V6] Statistiques des mouvements groupées par type.
+
+        Retourne :
+            { "entree": {"nb": 5, "qte_totale": 230, "classe": EntreeMouvement},
+              "sortie": {"nb": 3, "qte_totale": 80,  "classe": SortieMouvement},
+              ... }
+        """
+        from metaclasses.registre import RegistreMouvementMeta
+        registre = RegistreMouvementMeta.get_registre()
+
+        stats = {}
+        for type_mvt, classe in registre.items():
+            mvts = [m for m in self._mouvements if m.type_mvt == type_mvt]
+            stats[type_mvt] = {
+                "nb"         : len(mvts),
+                "qte_totale" : sum(m.qte for m in mvts),
+                "classe"     : classe,
+                "icone"      : classe.ICONE,
+                "label"      : classe.LABEL,
+            }
+        return stats
 
     # ── Statistiques ──────────────────────────────────────────────────────
 
@@ -169,8 +257,6 @@ class StockService:
 
     def nb_produits(self) -> int:
         return len(self._produits)
-
-    # ── Méthodes V3 ── Compréhensions et Générateurs ──────────────────────
 
     def par_categorie(self) -> dict:
         categories = {p.categorie for p in self._produits.values()}
@@ -208,7 +294,7 @@ class StockService:
             yield [p.ref, p.nom, p.categorie,
                    p.prix_achat, p.prix_vente, p.qte, p.seuil_min]
 
-    # ── Méthodes Magiques V2 ──────────────────────────────────────────────
+    # ── Méthodes Magiques ─────────────────────────────────────────────────
 
     def __len__(self) -> int:
         return len(self._produits)

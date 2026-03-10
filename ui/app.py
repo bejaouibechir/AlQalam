@@ -1,8 +1,14 @@
-# [V5 - Décorateurs] Fenêtre principale avec quatre onglets :
+# [V6 - Métaclasses] Fenêtre principale avec cinq onglets :
 # - "📦 Stock"             : tableau produits + filtres + recherche
 # - "📊 Tableau de bord"   : KPIs + stats catégories + top 5
 # - "🔔 Alertes"           : surveillance temps réel (thread daemon) [V4]
 # - "📋 Journal"           : historique d'audit des opérations décorées [V5]
+# - "🗂 Registre"          : registre métaclasses + démo Singleton        [V6]
+#
+# NOUVEAUTÉS V6 dans app.py :
+#   - Bouton "⚖️ Ajuster" dans les callbacks → dialogue d'ajustement inventaire
+#   - Bouton "↩️ Retour" → dialogue retour fournisseur
+#   - 5ème onglet RegistreFrame
 
 import customtkinter as ctk
 from tkinter import messagebox
@@ -16,9 +22,10 @@ from services.surveillance_service import SurveillanceService
 from ui.frames.stock_frame         import StockFrame
 from ui.frames.rapport_frame       import RapportFrame
 from ui.frames.alertes_frame       import AlertesFrame
-from ui.frames.journal_frame       import JournalFrame      # [V5]
+from ui.frames.journal_frame       import JournalFrame
+from ui.frames.registre_frame      import RegistreFrame        # [V6]
 from ui.frames.dialogs             import (
-    DialogueProduit, DialogueMouvement,
+    DialogueProduit, DialogueMouvement, DialogueAjustement,    # [V6] +DialogueAjustement
     DialogueFicheDetail, DialogueModification
 )
 
@@ -27,19 +34,20 @@ ctk.set_default_color_theme("blue")
 
 
 class AlQalamApp(ctk.CTk):
-    """Fenêtre principale V5 — 4 onglets, décorateurs + descripteurs actifs."""
+    """Fenêtre principale V6 — 5 onglets, métaclasses Singleton + Registre actifs."""
 
     def __init__(self):
         super().__init__()
         self.title(f"{APP_NAME}  —  v{APP_VERSION}")
         self.geometry(f"{APP_WIDTH}x{APP_HEIGHT}")
-        self.minsize(950, 640)
+        self.minsize(980, 660)
 
         x = (self.winfo_screenwidth()  - APP_WIDTH)  // 2
         y = (self.winfo_screenheight() - APP_HEIGHT) // 2
         self.geometry(f"{APP_WIDTH}x{APP_HEIGHT}+{x}+{y}")
 
-        self.stock        = StockService()   # [V5] contient maintenant _journal
+        # [V6] StockService() → Singleton garanti par SingletonMeta
+        self.stock        = StockService()
         self.surveillance = SurveillanceService(
             self.stock, intervalle=INTERVALLE_SURVEILLANCE
         )
@@ -56,32 +64,41 @@ class AlQalamApp(ctk.CTk):
         entete = ctk.CTkFrame(self, fg_color=COULEUR_PRIMAIRE, height=55, corner_radius=0)
         entete.pack(fill="x")
         entete.pack_propagate(False)
-        ctk.CTkLabel(entete, text="📚  Al Qalam — Gestion de Stock",
-                     font=ctk.CTkFont(size=20, weight="bold"),
-                     text_color="white").pack(side="left", padx=20)
-        ctk.CTkLabel(entete, text=f"v{APP_VERSION}",
-                     font=ctk.CTkFont(size=12),
-                     text_color="#A9CCE3").pack(side="right", padx=20)
+        ctk.CTkLabel(
+            entete, text="📚  Al Qalam — Gestion de Stock",
+            font=ctk.CTkFont(size=20, weight="bold"),
+            text_color="white",
+        ).pack(side="left", padx=20)
+        ctk.CTkLabel(
+            entete, text=f"v{APP_VERSION}",
+            font=ctk.CTkFont(size=12),
+            text_color="#A9CCE3",
+        ).pack(side="right", padx=20)
 
     def _construire_onglets(self):
-        """[V5] Quatre onglets : Stock, Tableau de bord, Alertes, Journal."""
-        self.tabs = ctk.CTkTabview(self, anchor="nw",
-                                    segmented_button_selected_color=COULEUR_PRIMAIRE,
-                                    segmented_button_selected_hover_color="#163D61")
+        """[V6] Cinq onglets : Stock, Tableau de bord, Alertes, Journal, Registre."""
+        self.tabs = ctk.CTkTabview(
+            self, anchor="nw",
+            segmented_button_selected_color=COULEUR_PRIMAIRE,
+            segmented_button_selected_hover_color="#163D61",
+        )
         self.tabs.pack(fill="both", expand=True, padx=10, pady=(6, 0))
 
         self.tabs.add("📦 Stock")
         self.tabs.add("📊 Tableau de bord")
         self.tabs.add("🔔 Alertes")
-        self.tabs.add("📋 Journal")      # [V5] nouvel onglet
+        self.tabs.add("📋 Journal")
+        self.tabs.add("🗂 Registre")      # [V6] nouvel onglet
 
         callbacks = {
-            "nouveau"  : self._ouvrir_dialogue_nouveau,
-            "entree"   : self._ouvrir_dialogue_entree,
-            "sortie"   : self._ouvrir_dialogue_sortie,
-            "modifier" : self._ouvrir_dialogue_modifier,
-            "supprimer": self._supprimer_produit,
-            "detail"   : self._ouvrir_fiche_detail,
+            "nouveau"   : self._ouvrir_dialogue_nouveau,
+            "entree"    : self._ouvrir_dialogue_entree,
+            "sortie"    : self._ouvrir_dialogue_sortie,
+            "modifier"  : self._ouvrir_dialogue_modifier,
+            "supprimer" : self._supprimer_produit,
+            "detail"    : self._ouvrir_fiche_detail,
+            "ajuster"   : self._ouvrir_dialogue_ajustement,   # [V6]
+            "retour"    : self._ouvrir_dialogue_retour,        # [V6]
         }
         self.stock_frame = StockFrame(self.tabs.tab("📦 Stock"), self.stock, callbacks)
         self.stock_frame.pack(fill="both", expand=True)
@@ -92,9 +109,12 @@ class AlQalamApp(ctk.CTk):
         self.alertes_frame = AlertesFrame(self.tabs.tab("🔔 Alertes"), self.surveillance)
         self.alertes_frame.pack(fill="both", expand=True)
 
-        # [V5] JournalFrame reçoit stock pour accéder à stock.journal
         self.journal_frame = JournalFrame(self.tabs.tab("📋 Journal"), self.stock)
         self.journal_frame.pack(fill="both", expand=True)
+
+        # [V6] RegistreFrame
+        self.registre_frame = RegistreFrame(self.tabs.tab("🗂 Registre"), self.stock)
+        self.registre_frame.pack(fill="both", expand=True)
 
     def _construire_pied(self):
         pied = ctk.CTkFrame(self, height=25, fg_color="#ECF0F1", corner_radius=0)
@@ -102,8 +122,8 @@ class AlQalamApp(ctk.CTk):
         pied.pack_propagate(False)
         ctk.CTkLabel(
             pied,
-            text="Al Qalam Stock Manager  |  Formation Python — Partie II  |  V5 Décorateurs & Descripteurs",
-            font=ctk.CTkFont(size=10), text_color="#7F8C8D"
+            text="Al Qalam Stock Manager  |  Formation Python — Partie II  |  V6 Métaclasses",
+            font=ctk.CTkFont(size=10), text_color="#7F8C8D",
         ).pack(side="left", padx=15)
 
     # ── Threading (V4) ────────────────────────────────────────────────────
@@ -111,16 +131,17 @@ class AlQalamApp(ctk.CTk):
     def _demarrer_surveillance(self) -> None:
         self.surveillance.demarrer()
 
-    # ── Helper ────────────────────────────────────────────────────────────
+    # ── Helper post-opération ─────────────────────────────────────────────
 
     def _post_operation(self):
-        """Rafraîchit les quatre onglets après toute modification du stock."""
+        """Rafraîchit les cinq onglets après toute modification du stock."""
         self.stock_frame.rafraichir()
         self.rapport_frame.rafraichir()
         self.alertes_frame.rafraichir()
-        self.journal_frame.rafraichir()   # [V5]
+        self.journal_frame.rafraichir()
+        self.registre_frame.rafraichir()   # [V6]
 
-    # ── Dialogues ─────────────────────────────────────────────────────────
+    # ── Dialogues existants ───────────────────────────────────────────────
 
     def _ouvrir_dialogue_nouveau(self):
         dlg = DialogueProduit(self)
@@ -134,9 +155,9 @@ class AlQalamApp(ctk.CTk):
                 messagebox.showerror("Erreur", str(e))
 
     def _ouvrir_dialogue_entree(self):
-        ref = self.stock_frame.get_ref_selectionnee()
+        ref    = self.stock_frame.get_ref_selectionnee()
         produit = self.stock.get_produit(ref) if ref else None
-        dlg = DialogueMouvement(self, self.stock, "entree", produit)
+        dlg    = DialogueMouvement(self, self.stock, "entree", produit)
         self.wait_window(dlg)
         if dlg.resultat is not None:
             try:
@@ -148,9 +169,9 @@ class AlQalamApp(ctk.CTk):
                 messagebox.showerror("Erreur", str(e))
 
     def _ouvrir_dialogue_sortie(self):
-        ref = self.stock_frame.get_ref_selectionnee()
+        ref    = self.stock_frame.get_ref_selectionnee()
         produit = self.stock.get_produit(ref) if ref else None
-        dlg = DialogueMouvement(self, self.stock, "sortie", produit)
+        dlg    = DialogueMouvement(self, self.stock, "sortie", produit)
         self.wait_window(dlg)
         if dlg.resultat is not None:
             try:
@@ -206,9 +227,60 @@ class AlQalamApp(ctk.CTk):
             self._post_operation()
             messagebox.showinfo("Supprimé", f"✅ '{produit.nom}' supprimé.")
 
+    # ── Dialogues V6 ─────────────────────────────────────────────────────
+
+    def _ouvrir_dialogue_ajustement(self):
+        """
+        [V6] Ajustement d'inventaire physique.
+        Utilise AjustementMouvement via Mouvement.fabriquer("ajustement", ...).
+        """
+        ref = self.stock_frame.get_ref_selectionnee()
+        if not ref:
+            messagebox.showwarning("Aucune sélection", "Sélectionnez un produit d'abord.")
+            return
+        try:
+            produit = self.stock.get_produit(ref)
+        except KeyError as e:
+            messagebox.showerror("Erreur", str(e))
+            return
+        dlg = DialogueAjustement(self, produit)
+        self.wait_window(dlg)
+        if dlg.resultat is not None:
+            r = dlg.resultat
+            try:
+                self.stock.ajustement_stock(r["ref"], r["qte_cible"], r["note"])
+                self._post_operation()
+                messagebox.showinfo(
+                    "Ajustement effectué",
+                    f"✅ Stock de '{produit.nom}' ajusté à {r['qte_cible']} unités."
+                )
+            except (ValueError, KeyError) as e:
+                messagebox.showerror("Erreur", str(e))
+
+    def _ouvrir_dialogue_retour(self):
+        """
+        [V6] Retour fournisseur.
+        Utilise RetourMouvement via Mouvement.fabriquer("retour", ...).
+        """
+        ref    = self.stock_frame.get_ref_selectionnee()
+        produit = self.stock.get_produit(ref) if ref else None
+        dlg    = DialogueMouvement(self, self.stock, "retour", produit)
+        self.wait_window(dlg)
+        if dlg.resultat is not None:
+            try:
+                r = dlg.resultat
+                self.stock.retour_stock(r["ref"], r["qte"], r["note"])
+                self._post_operation()
+                messagebox.showinfo("Retour enregistré", f"✅ Retour de {r['qte']} '{r['ref']}'.")
+            except (ValueError, KeyError) as e:
+                messagebox.showerror("Erreur", str(e))
+
+    # ── Quitter ───────────────────────────────────────────────────────────
+
     def _quitter(self):
         if messagebox.askyesno("Quitter", "Voulez-vous quitter Al Qalam ?"):
             self.alertes_frame.arreter_polling()
-            self.journal_frame.arreter_polling()   # [V5]
+            self.journal_frame.arreter_polling()
+            self.registre_frame.arreter_polling()   # [V6]
             self.surveillance.arreter()
             self.destroy()

@@ -1,1 +1,1 @@
-# ui/frames/__init__.py — package des frames (panneaux) de l'interface
+# [V6] Package ui.frames

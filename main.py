@@ -1,17 +1,25 @@
-# [V5 - Décorateurs] main.py est le seul fichier à exécuter.
-# Il initialise l'application et démarre la boucle graphique.
+# [V6 - Métaclasses] Point d'entrée de l'application Al Qalam Stock Manager.
+#
+# Nouveautés V6 :
+#   - StockService est un Singleton (SingletonMeta) : une seule instance garantie
+#   - Les mouvements de stock utilisent un registre automatique (RegistreMouvementMeta)
+#   - 4 types de mouvements : EntreeMouvement, SortieMouvement,
+#                             AjustementMouvement, RetourMouvement
+#   - Nouvel onglet "🗂 Registre" : visualise le registre et démontre le Singleton
+#
+# Lancement :
+#   py -3 main.py
 
 import sys
 from pathlib import Path
 
-# Ajoute le dossier racine au chemin Python pour les imports relatifs
 sys.path.insert(0, str(Path(__file__).parent))
 
 from ui.app import AlQalamApp
 
 
 def main():
-    """Lance l'application Al Qalam Stock Manager."""
+    """Lance l'application Al Qalam Stock Manager V6."""
     app = AlQalamApp()
     app.mainloop()
 

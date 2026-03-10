@@ -1,1 +1,1 @@
-# ui/widgets/__init__.py — package des widgets réutilisables
+# [V6] Package ui.widgets

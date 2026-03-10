@@ -1,33 +1,30 @@
-# [V5 - Décorateurs] Constantes globales du projet Al Qalam.
-# Modifier ici pour changer les paramètres sans toucher au code métier.
+# [V6 - Métaclasses] Constantes globales du projet Al Qalam.
 
 from pathlib import Path
 
 # ── Chemins ────────────────────────────────────────────────────────────────
-BASE_DIR    = Path(__file__).parent          # racine du projet
-DATA_DIR    = BASE_DIR / "data"              # données persistées
-EXPORTS_DIR = DATA_DIR / "exports"          # fichiers exportés
-IMPORTS_DIR = DATA_DIR / "imports"          # fichiers à importer
+BASE_DIR    = Path(__file__).parent
+DATA_DIR    = BASE_DIR / "data"
+EXPORTS_DIR = DATA_DIR / "exports"
+IMPORTS_DIR = DATA_DIR / "imports"
 
 # ── Application ────────────────────────────────────────────────────────────
 APP_NAME    = "Al Qalam — Gestion de Stock"
-APP_VERSION = "5.0.0"
-APP_WIDTH   = 1100
-APP_HEIGHT  = 700
+APP_VERSION = "6.0.0"
+APP_WIDTH   = 1150
+APP_HEIGHT  = 720
 
 # ── Stock ──────────────────────────────────────────────────────────────────
-SEUIL_MIN_DEFAUT = 5     # seuil d'alerte par défaut si non précisé
+SEUIL_MIN_DEFAUT = 5
 
-# ── Surveillance (V4 Threading) ────────────────────────────────────────────
-# Intervalle (en secondes) entre deux vérifications automatiques du stock.
-# Mettre une valeur faible (ex: 10) pendant les tests pédagogiques.
-INTERVALLE_SURVEILLANCE = 20   # 20 s en démo ; 300 s (5 min) en production
+# ── Surveillance (V4) ─────────────────────────────────────────────────────
+INTERVALLE_SURVEILLANCE = 20   # secondes
 
 # ── Couleurs (thème entreprise) ────────────────────────────────────────────
-COULEUR_PRIMAIRE  = "#1F4E79"   # bleu foncé  → boutons, en-têtes
-COULEUR_SECONDAIRE= "#2E86C1"   # bleu moyen  → survol
-COULEUR_ALERTE    = "#E74C3C"   # rouge       → produits en rupture
-COULEUR_OK        = "#27AE60"   # vert        → statut OK
-COULEUR_FOND      = "#F0F4F8"   # gris très clair → fond général
-COULEUR_TEXTE     = "#2C3E50"   # gris foncé → texte principal
-COULEUR_ORANGE    = "#E67E22"   # orange      → avertissements légers
+COULEUR_PRIMAIRE   = "#1F4E79"
+COULEUR_SECONDAIRE = "#2E86C1"
+COULEUR_ALERTE     = "#E74C3C"
+COULEUR_OK         = "#27AE60"
+COULEUR_FOND       = "#F0F4F8"
+COULEUR_TEXTE      = "#2C3E50"
+COULEUR_ORANGE     = "#E67E22"

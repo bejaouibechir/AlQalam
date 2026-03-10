@@ -5,7 +5,7 @@
     "categorie": "Écriture",
     "prix_achat": 0.15,
     "prix_vente": 0.5,
-    "qte": 165,
+    "qte": 150,
     "seuil_min": 20
   },
   {
@@ -41,7 +41,7 @@
     "categorie": "Effaçage",
     "prix_achat": 0.2,
     "prix_vente": 0.7,
-    "qte": 65,
+    "qte": 60,
     "seuil_min": 10
   },
   {
@@ -50,7 +50,7 @@
     "categorie": "Papier",
     "prix_achat": 2.5,
     "prix_vente": 5.0,
-    "qte": 400,
+    "qte": 300,
     "seuil_min": 50
   },
   {

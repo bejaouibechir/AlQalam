@@ -1,12 +1,6 @@
-# [V5 - Descripteurs] La classe Produit utilise maintenant des descripteurs
-# pour valider automatiquement chaque attribut lors de l'affectation.
-#
-# Avant (V4) : la validation était dans __init__ avec des if / raise manuels.
-# Après (V5) : les descripteurs interceptent toute affectation (y compris
-#              produit.qte += 5 fait dans stock_service) et valident à la volée.
-#
-# Avantage : impossible de mettre un prix négatif ou un nom vide,
-#            même en dehors des dialogues de l'UI.
+# [V5 - Descripteurs] La classe Produit utilise des descripteurs pour valider
+# automatiquement chaque attribut lors de l'affectation.
+# [V6] Produit reste identique — les métaclasses V6 ne concernent pas Produit.
 
 from models.descripteurs import Positif, PositifEntier, NonVide
 
@@ -21,21 +15,17 @@ class Produit:
     """
 
     # ── Descripteurs de classe ────────────────────────────────────────────
-    # [V5] Ces objets sont définis au niveau de la CLASSE (pas de l'instance).
-    # Python les consulte automatiquement lors de toute lecture/écriture.
     ref        = NonVide()        # ex: "CRAY-001"  — chaîne non vide
     nom        = NonVide()        # ex: "Crayon HB" — chaîne non vide
     categorie  = NonVide()        # ex: "Écriture"  — chaîne non vide
     prix_achat = Positif()        # float ≥ 0
     prix_vente = Positif()        # float ≥ 0
-    qte        = PositifEntier()  # int ≥ 0  (peut être 0 si rupture totale)
+    qte        = PositifEntier()  # int ≥ 0
     seuil_min  = PositifEntier()  # int ≥ 0
 
     def __init__(self, ref: str, nom: str, categorie: str,
                  prix_achat: float, prix_vente: float,
                  qte: int = 0, seuil_min: int = 5):
-        # [V5] Ces affectations passent par les descripteurs → validation auto.
-        # Chaque ligne appelle descriptor.__set__(self, valeur).
         self.ref        = ref
         self.nom        = nom
         self.categorie  = categorie
@@ -47,25 +37,20 @@ class Produit:
     # ── Méthodes métier ───────────────────────────────────────────────────
 
     def est_en_alerte(self) -> bool:
-        """Retourne True si la quantité est sous le seuil minimum."""
         return self.qte <= self.seuil_min
 
     def valeur_stock(self) -> float:
-        """Valeur totale du stock pour ce produit (qte × prix_achat)."""
         return self.qte * self.prix_achat
 
     def marge_unitaire(self) -> float:
-        """Bénéfice potentiel par unité vendue."""
         return self.prix_vente - self.prix_achat
 
     def statut_label(self) -> str:
-        """Retourne une étiquette lisible du statut de stock."""
         return "⚠️ Alerte" if self.est_en_alerte() else "✅ OK"
 
     # ── Sérialisation ─────────────────────────────────────────────────────
 
     def to_dict(self) -> dict:
-        """Convertit l'objet en dictionnaire (pour sauvegarde JSON)."""
         return {
             "ref"       : self.ref,
             "nom"       : self.nom,
@@ -78,7 +63,6 @@ class Produit:
 
     @classmethod
     def from_dict(cls, data: dict) -> "Produit":
-        """Recrée un Produit depuis un dictionnaire (chargement JSON)."""
         return cls(**data)
 
     # ── Représentation ────────────────────────────────────────────────────
@@ -89,8 +73,6 @@ class Produit:
 
     def __repr__(self) -> str:
         return f"Produit(ref={self.ref!r}, nom={self.nom!r}, qte={self.qte})"
-
-    # ── Méthodes Magiques V2 ──────────────────────────────────────────────
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, Produit):
